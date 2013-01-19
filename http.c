@@ -150,7 +150,7 @@ int main(int argc, char *argv[]) {
 		exit(EXIT_FAILURE);
 	}
 
-	printf("Procrastiante HTTP Server 0.1.1\n");
+	printf("Custom HTTP Server 0.1.1\n");
 
 	read_config(argv[1]);
 
