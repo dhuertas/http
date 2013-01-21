@@ -120,7 +120,7 @@ void send_response(int sockfd, request_t *req, response_t *resp) {
 
 		length = strlen(resp->headers[i]->name)+strlen(": ")+strlen(resp->headers[i]->value) + 2;		
 
-		buffer = realloc(buffer, strlen(buffer) + length);
+		buffer = realloc(buffer, strlen(buffer) + length + 1);
 
 		strncat(buffer, resp->headers[i]->name, strlen(resp->headers[i]->name));
 		strncat(buffer, ": ", 2);
@@ -258,7 +258,7 @@ void handle_response(int sockfd, request_t *req, response_t *resp) {
 					set_response_status(resp, 200, "OK");
 					
 					/* Look for mime type */
-					if (get_mime_type(strrchr(resource, '.'), &mime_type) == -1) {
+					if (get_mime_type(strrchr(file_path, '.'), &mime_type) == -1) {
 
 						if (conf.output_level >= DEBUG) printf("DEBUG: default mime type %s\n", default_mime_type);
 						mime_type = default_mime_type;
