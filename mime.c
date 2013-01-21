@@ -42,7 +42,7 @@ int get_mime_type(char *ext, char **mime_type) {
 
 	} else {
 
-		if (conf.output_level >= DEBUG) printf("DEBUG: mime type not found\n", mime_types[i].type);
+		if (conf.output_level >= DEBUG) printf("DEBUG: mime type not found\n");
 		*mime_type = NULL;
 
 	}
