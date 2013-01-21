@@ -26,6 +26,7 @@ void set_response_status(response_t *resp, int status_code, char *reason_phrase)
 		resp->reason_phrase = realloc(resp->reason_phrase, strlen(reason_phrase) + 1);
 	} else {
 		resp->reason_phrase = malloc(strlen(reason_phrase) + 1);
+		memset(resp->reason_phrase, 0, strlen(reason_phrase) + 1);
 	}
 
 	resp->status_code = status_code;
@@ -81,11 +82,11 @@ void set_response_header(response_t *resp, char *name, char *value) {
 
 		resp->headers[resp->num_headers]->name = malloc(strlen(name) + 1);
 		resp->headers[resp->num_headers]->value = malloc(strlen(value) + 1);
-
-		memcpy(resp->headers[resp->num_headers]->name, name, strlen(name));
-		memcpy(resp->headers[resp->num_headers]->value, value, strlen(value));
-		resp->headers[resp->num_headers]->name[strlen(name)] = '\0';
-		resp->headers[resp->num_headers]->value[strlen(value)] = '\0';
+		memset(resp->headers[resp->num_headers]->name, 0, strlen(name) + 1);
+		memset(resp->headers[resp->num_headers]->value, 0, strlen(value) + 1);
+		
+		strncat(resp->headers[resp->num_headers]->name, name, strlen(name));
+		strncat(resp->headers[resp->num_headers]->value, value, strlen(value));
 
 		resp->num_headers++;
 	}
@@ -308,12 +309,9 @@ int handle_get(request_t *req, response_t *resp) {
 		/* Append charset when mime type is text */
 		if (strncmp(mime_type, "text", 4) == 0) {
 
-			if (conf.output_level >= DEBUG) {
-				printf("DEBUG: conf.charset %s\n", conf.charset);
-			}
-
 			charset = malloc(strlen("charset=") + strlen(conf.charset) + 1);
-			strncpy(charset, "charset=", strlen("charset="));
+			memset(charset, 0, strlen("charset=") + strlen(conf.charset) + 1);
+			strncat(charset, "charset=", strlen("charset="));
 			strncat(charset, conf.charset, strlen(conf.charset));
 
 			set_response_header(resp, "Content-Type", charset);	/* Append */
