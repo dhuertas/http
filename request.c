@@ -214,8 +214,7 @@ void handle_request(int sockfd, request_t *req) {
 
 		req->query = malloc(string_length + 1);
 		memset(req->query, 0, string_length + 1);
-		memcpy(req->query, query, string_length);
-		req->query[string_length] = '\0';
+		strncat(req->query, query, string_length);
 
 		req->query_length = string_length;
 
@@ -234,7 +233,7 @@ void handle_request(int sockfd, request_t *req) {
 
 	req->resource = malloc(string_length + 1);
 	memset(req->resource, 0, string_length + 1);
-	strncpy(req->resource, req->uri, string_length);
+	strncat(req->resource, req->uri, string_length);
 	req->resource[string_length] = '\0';
 
 	string_length = 0;
