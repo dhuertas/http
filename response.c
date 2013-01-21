@@ -337,6 +337,7 @@ int handle_get(request_t *req, response_t *resp) {
 	} else {
 
 		set_response_status(resp, 404, "Not Found");
+		set_response_header(resp, "Connection", "Close");
 
 	}
 
