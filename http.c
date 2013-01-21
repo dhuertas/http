@@ -86,6 +86,9 @@ void request_handler(int client_sockfd) {
 	}
 
 	free(request.headers);
+	free(request.resource);
+	free(request.version);
+	free(request.uri);
 
 	if (request.query_length > 0) {
 		free(request.query);
