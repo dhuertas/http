@@ -16,6 +16,7 @@
 #include "headers.h"
 #include "request.h"
 #include "response.h"
+#include "util.h"
 
 extern config_t conf;
 
@@ -107,9 +108,10 @@ void send_response(int sockfd, request_t *req, response_t *resp) {
 
 	buffer = malloc(length);
 	memset(buffer, 0, length);
-	
+
 	strncpy(buffer, conf.http_version, strlen(conf.http_version));
 	strncat(buffer, " ", 1);
+
 	strncat(buffer, status_code, strlen(status_code));
 	strncat(buffer, " ", 1);
 	strncat(buffer, resp->reason_phrase, strlen(resp->reason_phrase));
@@ -167,31 +169,11 @@ void send_response(int sockfd, request_t *req, response_t *resp) {
 
 void handle_response(int sockfd, request_t *req, response_t *resp) {
 
-	char *file_path;
-	char *resource;
-
-	char *file_size;
-	char *mime_type;
-	char *charset;
-
 	char date_buffer[MAX_DATE_SIZE];
-	char file_exists;
-	
-	int fd, i, s, length;
-
-	struct stat file_info;
-
-	file_path = NULL;
-	resource = NULL;
-	file_size = NULL;
-	mime_type = NULL;
-	charset = NULL;
 
 	resp->status_code = 0;
 	resp->file_exists = FALSE;
 	resp->num_headers = 0;
-
-	length = 0;
 
 	get_date(date_buffer, "%a, %d %b %Y %H:%M:%S %Z");
 
@@ -201,300 +183,12 @@ void handle_response(int sockfd, request_t *req, response_t *resp) {
 	switch (req->method) {
 
 		case GET:
-
-			if (req->query_length > 0) {
-				/* Strip query string from uri */
-				length = strlen(req->uri) - req->query_length;
-			} else {
-				length = strlen(req->uri);
+			
+			if (handle_get(req, resp) < 0) {
+				set_response_status(resp, 500, "Internal Server Error");
+				set_response_header(resp, "Connection", "Close");
 			}
 			
-			resource = malloc(length + 1);
-			memset(resource, 0, length + 1);
-			strncpy(resource, req->uri, length);
-			resource[length] = '\0';
-
-			length = 0;
-
-			if (strncmp(&(resource[strlen(resource) - 1]), "/", 1) == 0) {
-
-				/* requested resource is a directory */
-				for (i = 0; i < sizeof(default_files) / sizeof(char *); i++) {
-
-					length = strlen(conf.document_root)
-						+ strlen(resource) 
-						+ strlen(default_files[i]);
-					
-					file_path = malloc(length + 1);
-
-					strncpy(file_path, conf.document_root, strlen(conf.document_root));
-					strncat(file_path, resource, strlen(resource));
-					strncat(file_path, default_files[i], strlen(default_files[i]));
-
-					if (conf.output_level >= DEBUG) printf("DEBUG: looking for file %s\n", file_path);
-
-					s = stat(file_path, &file_info);
-
-					if (s == 0) {
-						/* file exists */
-						resp->file_exists = TRUE;
-						break;
-					
-					} else if (s == -1) {
-						
-						if (conf.output_level >= DEBUG) printf("DEBUG: file not found %s\n", file_path);
-					
-					} else {
-
-						memset(file_path, 0, length + 1);
-						free(file_path);
-
-					}
-
-				}
-
-				if (resp->file_exists) {
-
-					set_response_status(resp, 200, "OK");
-					
-					/* Look for mime type */
-					if (get_mime_type(strrchr(file_path, '.'), &mime_type) == -1) {
-
-						if (conf.output_level >= DEBUG) printf("DEBUG: default mime type %s\n", default_mime_type);
-						mime_type = default_mime_type;
-
-					} else {
-
-						if (conf.output_level >= DEBUG) printf("DEBUG: mime type %s\n", mime_type);
-
-					}
-
-					set_response_header(resp, "Content-Type", mime_type);
-
-					/* Append charset when mime type is text */
-					if (strncmp(mime_type, "text", 4) == 0) {
-
-						if (conf.output_level >= DEBUG) {
-							printf("DEBUG: conf.charset %s (length %lu)\n", conf.charset, strlen(conf.charset));
-						}
-
-						charset = malloc(strlen("charset=") + strlen(conf.charset) + 1);
-						strncpy(charset, "charset=", strlen("charset="));
-						strncat(charset, conf.charset, strlen(conf.charset));
-
-						set_response_header(resp, "Content-Type", charset);	/* Append */
-
-						free(charset);
-
-					} else {
-
-						/* Get the file length */
-						integer_to_ascii(file_info.st_size, &file_size);
-
-						set_response_header(resp, "Content-Length", file_size);
-
-						free(file_size);
-
-					}
-
-					/* TODO Keep-Alive friendly */
-					set_response_header(resp, "Connection", "Close");
-
-					resp->file_path = malloc(strlen(file_path) + 1);
-					memset(resp->file_path, 0, strlen(resp->file_path) + 1);
-					strncat(resp->file_path, file_path, strlen(file_path));
-
-					free(file_path);
-
-				} else {
-
-					/* default file not found */
-					set_response_status(resp, 404, "Not Found");
-
-				}
-
-			} else {
-
-				/* TODO uri may still point to a directory ... */
-				/* TODO strip query string from uri */
-				length = strlen(conf.document_root) + strlen(resource);
-
-				file_path = malloc(length + 1);
-
-				memset(file_path, 0, length);
-
-				strncpy(file_path, conf.document_root, sizeof(conf.document_root));
-				strncat(file_path, resource, strlen(resource));
-
-				if (conf.output_level >= DEBUG) printf("DEBUG: file path %s\n", file_path);
-
-				s = stat(file_path, &file_info);
-
-				if (s == 0 && ! (file_info.st_mode & S_IFDIR)) {
-
-					/* File exists and is not a directory */
-					set_response_status(resp, 200, "OK");
-
-					/* Look for mime type */
-					if (get_mime_type(strrchr(resource, '.'), &mime_type) == -1) {
-
-						if (conf.output_level >= DEBUG) printf("DEBUG: default mime type %s\n", default_mime_type);
-						mime_type = default_mime_type;
-
-					} else {
-
-						if (conf.output_level >= DEBUG) printf("DEBUG: mime type %s\n", mime_type);
-
-					}
-
-					set_response_header(resp, "Content-Type", mime_type);
-
-					/* Append charset */
-					if (strncmp(mime_type, "text", 4) == 0) {
-
-						printf("DEBUG: conf.charset %s (length %lu)\n", conf.charset, strlen(conf.charset));
-
-						charset = malloc(strlen("charset=") + strlen(conf.charset) + 1);
-						strncpy(charset, "charset=", strlen("charset="));
-						strncat(charset, conf.charset, strlen(conf.charset));
-
-						set_response_header(resp, "Content-Type", charset);	/* Append */
-
-						free(charset);
-
-					} else {
-
-						/* Get the file length */
-						integer_to_ascii(file_info.st_size, &file_size);
-						set_response_header(resp, "Content-Length", file_size);
-						free(file_size);
-
-					}
-
-					//set_response_header(resp, "Transfer-Encoding", "chunked");
-					set_response_header(resp, "Connection", "Close"); /* TODO Keep-Alive friendly */
-
-					resp->file_exists = TRUE;
-
-					resp->file_path = malloc(strlen(file_path) + 1);
-					memset(resp->file_path, 0, strlen(file_path) + 1);
-					strncat(resp->file_path, file_path, strlen(file_path));
-
-					free(file_path);
-
-				} else if (s == 0 && (file_info.st_mode & S_IFDIR)) {
-
-					/* requested resource is a directory */
-					for (i = 0; i < sizeof(default_files) / sizeof(char *); i++) {
-
-						length = strlen(conf.document_root)
-							+ strlen(resource) 
-							+ 1
-							+ strlen(default_files[i]);
-					
-						file_path = malloc(length + 1);
-
-						strncpy(file_path, conf.document_root, strlen(conf.document_root));
-						strncat(file_path, resource, strlen(resource));
-						strncat(file_path, "/", 1);
-						strncat(file_path, default_files[i], strlen(default_files[i]));
-
-						if (conf.output_level >= DEBUG) printf("DEBUG: looking for file %s\n", file_path);
-
-						s = stat(file_path, &file_info);
-
-						if (s == 0) {
-							/* file exists */
-							resp->file_exists = TRUE;
-							break;
-					
-						} else if (s == -1) {
-						
-							if (conf.output_level >= DEBUG) printf("DEBUG: file not found %s\n", file_path);
-					
-						} else {
-
-							memset(file_path, 0, length + 1);
-							free(file_path);
-
-						}
-
-					}
-
-					if (resp->file_exists) {
-
-						set_response_status(resp, 200, "OK");
-
-						/* Look for mime type */
-						if (get_mime_type(strrchr(resource, '.'), &mime_type) == -1) {
-
-							if (conf.output_level >= DEBUG) printf("DEBUG: default mime type %s\n", default_mime_type);
-							mime_type = default_mime_type;
-
-						} else {
-
-							if (conf.output_level >= DEBUG) {
-								printf("DEBUG: mime type %s\n", mime_type);
-							}
-
-						}
-
-						set_response_header(resp, "Content-Type", mime_type);
-
-						/* Append charset when mime type is text */
-						if (strncmp(mime_type, "text", 4) == 0) {
-
-							if (conf.output_level >= DEBUG) {
-								printf("DEBUG: charset %s\n", conf.charset);
-							}
-
-							charset = malloc(strlen("charset=") + strlen(conf.charset) + 1);
-							strncpy(charset, "charset=", strlen("charset="));
-							strncat(charset, conf.charset, strlen(conf.charset));
-
-							set_response_header(resp, "Content-Type", charset);	/* Append */
-
-							free(charset);
-
-						} else {
-
-							/* Get the file length */
-							integer_to_ascii(file_info.st_size, &file_size);
-
-							set_response_header(resp, "Content-Length", file_size);
-
-							free(file_size);
-
-						}
-
-						/* TODO Keep-Alive friendly */
-						set_response_header(resp, "Connection", "Close");
-
-						resp->file_path = malloc(strlen(file_path) + 1);
-						memset(resp->file_path, 0, strlen(resp->file_path) + 1);
-						strncat(resp->file_path, file_path, strlen(file_path));
-
-						free(file_path);
-
-					} else {
-
-						/* default file not found */
-						set_response_status(resp, 404, "Not Found");
-
-					}
-
-				} else {
-
-					/* file not found */
-					set_response_status(resp, 404, "Not Found");
-					set_response_header(resp, "Connection", "Close");
-
-				}
-
-			}
-
-			if (resource != NULL) free(resource);
-
 			break;
 
 		case HEAD:
@@ -536,4 +230,126 @@ void handle_response(int sockfd, request_t *req, response_t *resp) {
 
 	send_response(sockfd, req, resp);
 
+}
+
+int handle_get(request_t *req, response_t *resp) {
+
+	char *res_path;
+	char *file_path;
+	char *file_size;
+	char *file_ext;
+	char *mime_type;
+	char *charset;
+
+	int fd, i, s, string_length;
+
+	struct stat file_info;
+
+	file_path = NULL;
+	file_size = NULL;
+	mime_type = NULL;
+	charset = NULL;
+
+	string_length = 0;
+
+	if (resource_path(req->resource, &res_path) < 0) {
+		handle_error("resource_path");
+	}
+
+	if (is_dir(res_path)) {
+
+		if (directory_index_lookup(res_path, &(resp->file_path)) >= 0) {
+			resp->file_exists = TRUE;
+		}
+
+	} else if (is_file(res_path)) {
+
+		resp->file_exists = TRUE;
+
+		string_length = strlen(res_path);
+		resp->file_path = malloc(string_length + 1);
+
+		memset(resp->file_path, 0, string_length + 1);
+		strncat(resp->file_path, res_path, string_length);
+
+	} else {	
+		/* TODO cgi */
+	}
+
+	free(res_path);
+
+	if (resp->file_exists) {
+
+		set_response_status(resp, 200, "OK");
+
+		stat(resp->file_path, &file_info);
+
+		/* Look for mime type */
+		file_ext = strrchr(resp->file_path, '.');
+
+		if (get_mime_type(file_ext, &mime_type) == -1) {
+
+			if (conf.output_level >= DEBUG){
+				printf("DEBUG: default mime type %s\n", default_mime_type);
+			}
+
+			mime_type = default_mime_type;
+
+		} else {
+
+			if (conf.output_level >= DEBUG) {
+				printf("DEBUG: mime type %s\n", mime_type);
+			}
+
+		}
+
+		set_response_header(resp, "Content-Type", mime_type);
+
+		/* Append charset when mime type is text */
+		if (strncmp(mime_type, "text", 4) == 0) {
+
+			if (conf.output_level >= DEBUG) {
+				printf("DEBUG: conf.charset %s\n", conf.charset);
+			}
+
+			charset = malloc(strlen("charset=") + strlen(conf.charset) + 1);
+			strncpy(charset, "charset=", strlen("charset="));
+			strncat(charset, conf.charset, strlen(conf.charset));
+
+			set_response_header(resp, "Content-Type", charset);	/* Append */
+
+			free(charset);
+
+		} else {
+
+			/* Get the file length */
+			integer_to_ascii(file_info.st_size, &file_size);
+
+			set_response_header(resp, "Content-Length", file_size);
+
+			free(file_size);
+
+		}
+
+		/* TODO Keep-Alive friendly */
+		set_response_header(resp, "Connection", "Close");
+
+	} else {
+
+		set_response_status(resp, 404, "Not Found");
+
+	}
+
+	return 0;
+
+}
+
+int handle_post(request_t *req, response_t *resp) {
+	
+	return 0;
+}
+
+int handle_head(request_t *req, response_t *resp) {
+	
+	return 0;
 }

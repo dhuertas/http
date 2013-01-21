@@ -47,6 +47,12 @@ void get_date(char *buffer, char *format) {
 
 }
 
+/*
+ * Sends a file through a socket stream
+ * 
+ * @param sockfd: Socket file descriptor
+ * @param file_path: absolute path to file
+ */
 void send_file(int sockfd, char *file_path) {
 
 	char buffer[MAX_BUFFER];
@@ -65,15 +71,171 @@ void send_file(int sockfd, char *file_path) {
 	while ((r = read(fd, buffer, MAX_BUFFER)) > 0) {
 
 		if ((w = send(sockfd, buffer, r, 0)) != r) {
-			handle_error("sending_file: send");
+			handle_error("send");
 		}
 
 	}
 
 	if (r < 0) {
-		handle_error("sending_file: read");
+		handle_error("read");
 	}
 
 	close(fd);
 
+}
+
+/*
+ * Checks whether the path is a directory or not
+ *
+ * @param path: absolute path
+ * @return: true when path is a directory
+ */
+int is_dir(char *path) {
+
+	int s;
+
+	struct stat info;
+	
+	s = stat(path, &info);
+
+	return (s == 0 && (info.st_mode & S_IFDIR));
+
+}
+
+int is_file(char *path) {
+
+	int s;
+
+	struct stat info;
+
+	s = stat(path, &info);
+
+	return (s == 0 && (info.st_mode & S_IFREG));
+
+}
+
+/*
+ * Constructs the file path to the requested resource using the
+ * configured root directory.
+ *
+ * @param resource: string of the requested resource
+ * @param path: string to store the full path
+ *
+ * WARNING: this function allocates memory. Remember to free it when not
+ * in use.
+ */
+int resource_path(char *resource, char **path) {
+
+	int string_length;
+
+	if (resource == NULL) {
+		return -1;
+	}
+
+	if (resource[0] == '/') {
+
+		string_length = strlen(conf.document_root)
+			+ strlen(resource);
+
+		*path = malloc(string_length + 1);
+
+		memset(*path, 0, string_length + 1);
+		strncpy(*path, conf.document_root, strlen(conf.document_root));
+		strncat(*path, resource, strlen(resource));
+
+	} else {
+
+		string_length = strlen(conf.document_root) + 1
+			+ strlen(resource);
+
+		*path = malloc(string_length + 1);
+
+		memset(*path, 0, string_length + 1);
+		strncpy(*path, conf.document_root, strlen(conf.document_root));
+		strncat(*path, "/", 1);
+		strncat(*path, resource, strlen(resource));
+
+	}
+
+	return 0;
+
+}
+
+/*
+ * Looks whether the directory contains any of the default index files.
+ *
+ * @param dir_path: path to the directory
+ * @param file_path: contains the path to the file when found
+ */
+int directory_index_lookup(char *dir_path, char **file_path) {
+
+	int i, s, string_length;
+
+	struct stat file_info;
+
+	string_length = 0;
+
+	if (dir_path == NULL) {
+		return -1;
+	}
+
+	for (i = 0; i < conf.directory_index_count; i++) {
+
+		string_length = strlen(dir_path) + ( ! IS_DS_LAST(dir_path) ? 1 : 0)
+			+ strlen(conf.directory_index[i]);
+
+		*file_path = malloc(string_length + 1);
+		memset(*file_path, 0, string_length + 1);
+
+		strncat(*file_path, dir_path, strlen(dir_path));
+
+		if ( ! IS_DS_LAST(dir_path)) strncat(*file_path, "/", 1);
+
+		strncat(*file_path, conf.directory_index[i], strlen(conf.directory_index[i]));
+
+		if (conf.output_level >= DEBUG) {
+			printf("DEBUG: looking for file %s\n", conf.directory_index[i]);
+		}
+
+		s = stat(*file_path, &file_info);
+
+		if (s == 0) {
+
+			return i;
+
+		} else if (s == -1) {
+
+			if (conf.output_level >= DEBUG) {
+				printf("DEBUG: file not found %s\n", *file_path);
+			}
+
+		} else {
+
+			memset(*file_path, 0, string_length + 1);
+			free(*file_path);
+
+		}
+
+	}
+
+	return -1;
+
+}
+
+/*
+ * Locates a char in the string and returns its position (starting from 0)
+ *
+ * @param string
+ * @param c
+ */
+int chrpos(char *string, int c) {
+
+	int i = 0;
+
+	while (&string[i] != '\0') {
+		if (string[i] == c) return i;
+		i++;
+	}
+
+	return -1;
 }

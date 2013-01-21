@@ -14,6 +14,7 @@
 /* local header files */
 #include "constants.h"
 #include "config.h"
+#include "util.h"
 
 extern config_t conf;
 /*
@@ -29,6 +30,7 @@ void read_config(char *file_path) {
 	int fd;
 	int length, line_length, readed;
 	int n, i, size, count, file_size;
+	int white_space, last_comma;
 
 	length = 0;
 	line_length = 0;
@@ -41,8 +43,11 @@ void read_config(char *file_path) {
 	file_size = 0;
 
 	conf.http_version = malloc(strlen("HTTP/1.1") + 1);
+
 	memset(conf.http_version, 0, strlen("HTTP/1.1") + 1);
 	strncat(conf.http_version, "HTTP/1.1", strlen("HTTP/1.1"));
+
+	conf.directory_index_count = 0;
 
 	if ((fd = open(file_path, O_RDONLY, 0644)) < 0) {
 		handle_error("server_config: open");
@@ -133,33 +138,42 @@ void read_config(char *file_path) {
 
 				conf.output_level = atoi((strchr(line, ' ') + sizeof(char)));
 
-			} else if (strncmp(line, "DefaultFiles ", strlen("DefaultFiles ")) == 0) {
+			} else if (strncmp(line, "DirectoryIndex ", strlen("DirectoryIndex ")) == 0) {
 
-				i = 0;
+				length = 0;
+				count = 0;
+				conf.directory_index_count = 0;
 
-				while (strlen(&value[i]) > 0) {
-					/* Look for comma */
-					size = 0;
-					count = 0;
+				while (value[i] != '\0') {
+					if (strncmp(&value[i], ",", 1) == 0) {
+						/* comma found */
+						conf.directory_index = realloc(conf.directory_index, (count + 1)*sizeof(char *));
+						conf.directory_index[count] = malloc(length + 1);
+						
+						memset(conf.directory_index[count], 0, length + 1);
+						strncat(conf.directory_index[count], &value[i-length], length);
 
-					if (strncmp(&value[i], ", ", 2) == 0) {
-
-						conf.default_files = realloc(conf.default_files, (count + 1) * sizeof(char *));
-						conf.default_files[count] = malloc(size + 1);
-
-						memset(conf.default_files[count], 0, size + 1);
-						strncat(conf.default_files[count], &value[i - size], size);
-
+						length = 0;
+						conf.directory_index_count++;
 						count++;
-						size = 0;
-						i += 2;
 
+					} else if (strncmp(&value[i], " ", 1) == 0) {
+						/* whitespace found */
 					} else {
-
-						size++;
-						i++;
+						length++;
 					}
 
+					i++;
+				}
+
+				/* reached end of line */
+				if (value[i-1] != ',') {
+
+					conf.directory_index = realloc(conf.directory_index, (count + 1)*sizeof(char *));
+					conf.directory_index[count] = malloc(length + 1);
+					memset(conf.directory_index[count], 0, length + 1);
+					strncat(conf.directory_index[count], &value[i-length], length);
+					conf.directory_index_count++;
 				}
 
 			} else {
@@ -168,7 +182,7 @@ void read_config(char *file_path) {
 
 			}
 
-			memset(line, '\0', line_length);
+			memset(line, 0, line_length);
 			free(line);
 			line_length = 0;
 
@@ -185,6 +199,8 @@ void read_config(char *file_path) {
 
 	}
 
+	n = sizeof(conf.directory_index) / sizeof(conf.directory_index[0]);
+
 	if (conf.output_level >= DEBUG) {
 
 		printf("Server configuration:\n");
@@ -192,6 +208,13 @@ void read_config(char *file_path) {
 		printf("  Listen port: %d\n", conf.listen_port);
 		printf("  Default charset: %s\n", conf.charset);
 		printf("  Output level: %d\n", conf.output_level);
+		printf("  Directory index: ");
+	
+		for (i = 0; i < conf.directory_index_count; i++) {
+			printf("%s ", conf.directory_index[i]);
+		}
+		
+		printf("\n");
 
 	}
 

@@ -35,9 +35,18 @@
 #define TRACE			5
 #define CONNECT			6
 
+/*
+ * FILES
+ */
+#define DS				'/' 		// Directory  Separator
+#define IS_DS_LAST(str) (str[strlen(str) - 1] == DS)	
+
+/*
+ * ERRORS
+ */
 #define handle_error(msg) \
 	do { \
-		fprintf(stderr, "Error [%s:%d] %s: %s\n", __FILE__, __LINE__, msg, strerror(errno)); \
+		fprintf(stderr, "ERROR: file %s at line %d. Caller function %s says %s (%s).\n", __FILE__, __LINE__, __func__, msg, strerror(errno)); \
 		exit(EXIT_FAILURE);\
 	} while (0)
 

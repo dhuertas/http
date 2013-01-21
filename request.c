@@ -104,6 +104,8 @@ void handle_request(int sockfd, request_t *req) {
 	char *header_value = NULL;
 
 	int start, end, pos, tmp;
+	int string_length;
+
 	uint8_t i;
 
 	start = 0;
@@ -112,10 +114,12 @@ void handle_request(int sockfd, request_t *req) {
 	pos = 0;
 	tmp = 0;
 
+	string_length = 0;
+
 	/* Initialize data structures */
 	req->num_headers = 0;
 	req->query_length = 0;
-	
+
 	/* allocate first 1024 bytes for the request */
 	buffer = malloc(ALLOC_REQ);
 	memset(buffer, 0, ALLOC_REQ);
@@ -124,7 +128,7 @@ void handle_request(int sockfd, request_t *req) {
 
 	if (conf.output_level >= VERBOSE) {
 		printf("%s\n", buffer);
-	} 
+	}
 
 	while (strncmp(&buffer[start], "\r\n", 2) != 0) {
 
@@ -146,7 +150,7 @@ void handle_request(int sockfd, request_t *req) {
 			while (strncmp(&buffer[pos], " ", 1) != 0) pos++;
 			pos++;
 			req->uri = malloc(pos - tmp);
-			
+
 			memcpy(req->uri, &buffer[tmp], pos - tmp);
 			req->uri[pos - tmp - 1] = '\0';
 			tmp = pos;
@@ -155,7 +159,7 @@ void handle_request(int sockfd, request_t *req) {
 			req->version = malloc(pos - tmp);
 			memcpy(req->version, &buffer[tmp], pos - tmp);
 			req->version[pos - tmp - 1] = '\0';
-			
+
 			for (i = 0; i < 7; i++) {
 				if(strncmp(methods[i], method, strlen(method)) == 0) {
 					req->method = i;
@@ -163,24 +167,6 @@ void handle_request(int sockfd, request_t *req) {
 			}
 
 			free(method);
-
-			/* Look for the query part */
-			if (strchr(req->uri, '?') != NULL) {
-
-				/* We may receive an empty query (e.g "/somefile.ext?") */
-				query = strchr(req->uri, '?');
-				req->query = malloc(strlen(query) + 1);
-				memset(req->query, 0, strlen(query) + 1);
-				memcpy(req->query, query, strlen(query));
-				req->query[strlen(query)] = '\0';
-
-				req->query_length = strlen(req->query);
-
-				if (conf.output_level >= DEBUG) {
-					printf("DEBUG: query %s\n", req->query);	
-				}
-
-			}
 
 		} else {
 
@@ -195,7 +181,7 @@ void handle_request(int sockfd, request_t *req) {
 			}
 
 			req->headers[req->num_headers] = malloc(sizeof(header_t *));
-			
+
 			/* parse headers */
 			while (strncmp(&buffer[start + pos], ":", 1) != 0) pos++;
 			req->headers[req->num_headers]->name = malloc(pos++);
@@ -204,7 +190,7 @@ void handle_request(int sockfd, request_t *req) {
 			while (strncmp(&buffer[start + pos], "\r\n", 2) != 0) pos++;
 			req->headers[req->num_headers]->value = malloc((pos++) - tmp);
 			tmp = pos;
-			
+
 			sscanf(&buffer[start], "%[^:]: %[^\r\n]", 
 				req->headers[req->num_headers]->name, 
 				req->headers[req->num_headers]->value);
@@ -217,6 +203,41 @@ void handle_request(int sockfd, request_t *req) {
 		start = end;
 
 	}
+
+	/* Look for the query part */
+	if (strchr(req->uri, '?') != NULL) {
+
+		/* We may receive an empty query (e.g "/somefile.ext?") */
+		query = strchr(req->uri, '?');
+
+		string_length = strlen(query);
+
+		req->query = malloc(string_length + 1);
+		memset(req->query, 0, string_length + 1);
+		memcpy(req->query, query, string_length);
+		req->query[string_length] = '\0';
+
+		req->query_length = string_length;
+
+		if (conf.output_level >= DEBUG) {
+			printf("DEBUG: query %s\n", req->query);	
+		}
+
+	}
+
+	/* Get the resource requested */
+	if (req->query_length > 0) {
+		string_length = strlen(req->uri) - req->query_length; // Strip query string from uri
+	} else {
+		string_length = strlen(req->uri);
+	}
+
+	req->resource = malloc(string_length + 1);
+	memset(req->resource, 0, string_length + 1);
+	strncpy(req->resource, req->uri, string_length);
+	req->resource[string_length] = '\0';
+
+	string_length = 0;
 
 	/* free buffer */
 	free(buffer);

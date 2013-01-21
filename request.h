@@ -5,8 +5,9 @@
 typedef struct request {
 	uint8_t method;
 	char *uri;
-	char *query;
 	char *version;
+	char *resource;
+	char *query;
 	char *message_body;
 	uint32_t query_length;
 	uint16_t num_headers;

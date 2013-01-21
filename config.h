@@ -11,9 +11,8 @@ typedef struct config {
 	char *document_root;
 	char *http_version;
 	char *charset;
-	char **default_files;
+	char **directory_index;
+	uint16_t directory_index_count;
 } config_t;
-
-static char *default_files[2] = {"index.html", "index.htm"};
 
 void read_config(char *conf_file_name);
