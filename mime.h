@@ -7,8 +7,9 @@
  	char *type;
  } mime_t;
  
-static mime_t mime_types[9] = {
+static mime_t mime_types[] = {
 	{"bmp",		"image/bmp"},
+	{"css", 	"text/css"},
 	{"html", 	"text/html"},
 	{"htm", 	"text/html"},
 	{"jpg",  	"image/jpeg"},
