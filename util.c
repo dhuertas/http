@@ -18,6 +18,12 @@
 
 extern config_t conf;
 
+/*
+ * Converts an "unknown" integer to a string buffer
+ *
+ * @param string
+ * @param c
+ */
 void integer_to_ascii(int number, char **result) {
 	
 	int tmp, count;
@@ -35,6 +41,14 @@ void integer_to_ascii(int number, char **result) {
 	
 }
 
+/*
+ * Gets the current date using the format specified in the argument
+ * 
+ * @param buffer: the address to store the formated date
+ * @param format: the date format
+ *
+ * More info: man 2 date
+ */
 void get_date(char *buffer, char *format) {
 
 	struct timeval tv;
@@ -85,7 +99,7 @@ void send_file(int sockfd, char *file_path) {
 }
 
 /*
- * Checks whether the path is a directory or not
+ * Checks whether the path is a directory
  *
  * @param path: absolute path
  * @return: true when path is a directory
@@ -102,6 +116,12 @@ int is_dir(char *path) {
 
 }
 
+/*
+ * Checks whether the path is a file
+ *
+ * @param path: absolute path
+ * @return: true when path is a regular file
+ */
 int is_file(char *path) {
 
 	int s;
@@ -166,6 +186,9 @@ int resource_path(char *resource, char **path) {
  *
  * @param dir_path: path to the directory
  * @param file_path: contains the path to the file when found
+ * 
+ * WARNING: this function allocates memory. Remember to free it when not
+ * in use.
  */
 int directory_index_lookup(char *dir_path, char **file_path) {
 
@@ -225,8 +248,8 @@ int directory_index_lookup(char *dir_path, char **file_path) {
 /*
  * Locates a char in the string and returns its position (starting from 0)
  *
- * @param string
- * @param c
+ * @param string: the haystack
+ * @param c: the character to be found
  */
 int chrpos(char *string, int c) {
 
