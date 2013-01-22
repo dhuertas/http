@@ -45,16 +45,71 @@ void set_response_status(response_t *resp, int status_code, char *reason_phrase)
  * @param name: a valid HTML header name (e.g. "Content-Type")
  * @param value: the header content
  */
-void set_response_header(response_t *resp, char *name, char *value) {
+void write_response_header(response_t *resp, char *name, char *value) {
 
-	uint16_t i = 0;
-	char found = 0;
+	uint8_t found;
+	uint16_t i;
+
+	int new_length;
+
+	found = FALSE;
+			
+	for (i = 0; i < resp->num_headers; i++) {
+
+		if (strncmp(resp->headers[i]->name, name, strlen(name)) == 0) {
+
+			/* header already exist */
+			memset(resp->headers[i]->value, 0, strlen(resp->headers[i]->value) + 1);
+			free(resp->headers[i]->value);
+			
+			new_length = strlen(value);
+			resp->headers[i]->value = malloc(new_length + 1);
+			memset(resp->headers[i]->value, 0, new_length + 1);
+			strncat(resp->headers[i]->value, value, strlen(value));
+
+			found = TRUE;
+			break;
+		}
+
+	}
+
+	if ( ! found) {
+
+		if (resp->num_headers == 0) {
+
+			resp->headers = malloc(sizeof(header_t *));
+
+		} else {
+
+			resp->headers = realloc(resp->headers, (resp->num_headers+1)*sizeof(header_t *));	
+
+		}
+
+		resp->headers[resp->num_headers] = malloc(sizeof(header_t *));
+
+		resp->headers[resp->num_headers]->name = malloc(strlen(name) + 1);
+		resp->headers[resp->num_headers]->value = malloc(strlen(value) + 1);
+		memset(resp->headers[resp->num_headers]->name, 0, strlen(name) + 1);
+		memset(resp->headers[resp->num_headers]->value, 0, strlen(value) + 1);
+
+		strncat(resp->headers[resp->num_headers]->name, name, strlen(name));
+		strncat(resp->headers[resp->num_headers]->value, value, strlen(value));
+
+		resp->num_headers++;
+
+	}
+
+}
+
+void append_response_header(response_t *resp, char *name, char *value) {
+
+	uint16_t i;
 
 	int new_length;
 
 	for (i = 0; i < resp->num_headers; i++) {
 		
-		if ( ! found && strncmp(resp->headers[i]->name, name, strlen(name)) == 0) {
+		if (strncmp(resp->headers[i]->name, name, strlen(name)) == 0) {
 
 			/* header already exist, append it */
 			new_length = strlen(resp->headers[i]->value) + strlen("; ") + strlen(value);
@@ -64,31 +119,8 @@ void set_response_header(response_t *resp, char *name, char *value) {
 			strncat(resp->headers[i]->value, "; ", 2);
 			strncat(resp->headers[i]->value, value, strlen(value));
 
-			found = 1;
-
 		}
 
-	}
-
-	if ( ! found) {
-
-		if (resp->num_headers == 0) {
-			resp->headers = malloc(sizeof(header_t *));
-		} else {
-			resp->headers = realloc(resp->headers, (resp->num_headers+1)*sizeof(header_t *));	
-		}
-
-		resp->headers[resp->num_headers] = malloc(sizeof(header_t *));
-
-		resp->headers[resp->num_headers]->name = malloc(strlen(name) + 1);
-		resp->headers[resp->num_headers]->value = malloc(strlen(value) + 1);
-		memset(resp->headers[resp->num_headers]->name, 0, strlen(name) + 1);
-		memset(resp->headers[resp->num_headers]->value, 0, strlen(value) + 1);
-		
-		strncat(resp->headers[resp->num_headers]->name, name, strlen(name));
-		strncat(resp->headers[resp->num_headers]->value, value, strlen(value));
-
-		resp->num_headers++;
 	}
 
 }
@@ -170,62 +202,78 @@ void send_response(int sockfd, request_t *req, response_t *resp) {
 
 void handle_response(int sockfd, request_t *req, response_t *resp) {
 
+	char *connection;
 	char date_buffer[MAX_DATE_SIZE];
 
 	resp->status_code = 0;
 	resp->file_exists = FALSE;
-	resp->num_headers = 0;
+
+	connection = NULL;
 
 	get_date(date_buffer, "%a, %d %b %Y %H:%M:%S %Z");
 
-	set_response_header(resp, "Date", date_buffer);
-	set_response_header(resp, "Server", conf.server_name);
+	write_response_header(resp, "Date", date_buffer);
+	write_response_header(resp, "Server", conf.server_name);
+
+	get_request_header(req, "Connection", &connection);
+
+	if (connection == NULL) {
+
+		write_response_header(resp, "Connection", "close");
+
+	} else if (strncasecmp(connection, "close", strlen("close")) == 0) {
+
+		write_response_header(resp, "Connection", "close");
+
+	} else {
+
+		write_response_header(resp, "Connection", "keep-alive");
+
+	}
 
 	switch (req->method) {
 
 		case GET:
-			
 			if (handle_get(req, resp) < 0) {
 				set_response_status(resp, 500, "Internal Server Error");
-				set_response_header(resp, "Connection", "Close");
 			}
 			
 			break;
 
 		case HEAD:
 			set_response_status(resp, 405, "Method Not Allowed");
-			set_response_header(resp, "Connection", "Close");
+			write_response_header(resp, "Connection", "Close");
 			break;
 		
 		case POST:
 			/* Look for "Content-Length" and "Expect" headers before anything else */
 			set_response_status(resp, 405, "Method Not Allowed");
-			set_response_header(resp, "Connection", "Close");
+			write_response_header(resp, "Connection", "Close");
 			break;
 		
 		case PUT:
 			set_response_status(resp, 405, "Method Not Allowed");
-			set_response_header(resp, "Connection", "Close");
+			write_response_header(resp, "Connection", "Close");
 			break;
 		
 		case DELETE:
 			set_response_status(resp, 405, "Method Not Allowed");
-			set_response_header(resp, "Connection", "Close");
+			write_response_header(resp, "Connection", "Close");
 			break;
 		
 		case TRACE:
 			set_response_status(resp, 405, "Method Not Allowed");
-			set_response_header(resp, "Connection", "Close");
+			write_response_header(resp, "Connection", "Close");
 			break;
 		
 		case CONNECT:
 			set_response_status(resp, 405, "Method Not Allowed");
-			set_response_header(resp, "Connection", "Close");
+			write_response_header(resp, "Connection", "Close");
 			break;
 		
 		default:
 			set_response_status(resp, 405, "Method Not Allowed");
-			set_response_header(resp, "Connection", "Close");
+			write_response_header(resp, "Connection", "Close");
 			break;
 	}
 
@@ -304,7 +352,7 @@ int handle_get(request_t *req, response_t *resp) {
 
 		}
 
-		set_response_header(resp, "Content-Type", mime_type);
+		write_response_header(resp, "Content-Type", mime_type);
 
 		/* Append charset when mime type is text */
 		if (strncmp(mime_type, "text", 4) == 0) {
@@ -314,7 +362,7 @@ int handle_get(request_t *req, response_t *resp) {
 			strncat(charset, "charset=", strlen("charset="));
 			strncat(charset, conf.charset, strlen(conf.charset));
 
-			set_response_header(resp, "Content-Type", charset);	/* Append */
+			append_response_header(resp, "Content-Type", charset);
 
 			free(charset);
 
@@ -323,19 +371,15 @@ int handle_get(request_t *req, response_t *resp) {
 			/* Get the file length */
 			integer_to_ascii(file_info.st_size, &file_size);
 
-			set_response_header(resp, "Content-Length", file_size);
+			write_response_header(resp, "Content-Length", file_size);
 
 			free(file_size);
 
 		}
 
-		/* TODO Keep-Alive friendly */
-		set_response_header(resp, "Connection", "Close");
-
 	} else {
 
 		set_response_status(resp, 404, "Not Found");
-		set_response_header(resp, "Connection", "Close");
 
 	}
 

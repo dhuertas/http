@@ -12,6 +12,7 @@
 #include <stdint.h>
 
 /* connection */
+#include <sys/select.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -54,27 +55,96 @@ volatile int client_sockfd_count;
 /* Server config */
 config_t conf;
 
-void request_handler(int client_sockfd) {
+void request_handler(int id, int client_sockfd) {
 
-	uint16_t i = 0;
+	char *connection;
 
-	pthread_t thread_id;
+	int i, n;
 
-	thread_id = pthread_self();
-
-	if (conf.output_level >= DEBUG) {
-		printf("DEBUG: thread with ID %lu handling request at socket %d\n", 
-			(unsigned long )pthread_self(), client_sockfd);
-	} 
+	fd_set select_set;
  
+ 	struct timeval timeout;
+
 	request_t request;
 	response_t response;
 
+	connection = NULL;
+
+ 	i = 0;
+	n = 0;
+
+	request.num_headers = 0;
+	response.num_headers = 0;
+
+	timeout.tv_sec = TIME_OUT;
+	timeout.tv_usec = 0;
+
+	if (conf.output_level >= DEBUG) {
+		printf("DEBUG: thread %d handling request at socket %d\n", id, client_sockfd);
+	}
+
 	handle_request(client_sockfd, &request);
 
-	handle_response(client_sockfd, &request, &response);
+	get_request_header(&request, "Connection", &connection);
 
-	close(client_sockfd); /* TODO Keep-Alive friendly */
+	if (connection == NULL) {
+		/* Some http clients may not send the Connection header ... */
+		handle_response(client_sockfd, &request, &response);
+
+	} else if (strncasecmp(connection, "close", strlen("close")) == 0) {
+
+		handle_response(client_sockfd, &request, &response);
+
+	} else {
+
+		if (conf.output_level >= DEBUG) {
+			printf("DEBUG: Persistent connection. Connection will remain open for %d seconds\n", TIME_OUT);
+		}
+
+		/* Persistent connections are the default behavior in HTTP/1.1 */
+		handle_response(client_sockfd, &request, &response);
+
+		FD_ZERO(&select_set);
+
+		FD_SET(client_sockfd, &select_set);
+
+		while ((n = select(client_sockfd + 1, &select_set, NULL, NULL, &timeout)) > 0) {
+
+			if (FD_ISSET(client_sockfd, &select_set)) {
+
+				if (conf.output_level >= DEBUG) {
+					printf("DEBUG: connection is still open\n");
+				}
+
+				handle_request(client_sockfd, &request);
+
+				handle_response(client_sockfd, &request, &response);
+
+			}
+
+		}
+
+		if (n < 0) {
+			
+			if (errno != EBADF){
+				handle_error("select");
+			} 
+			
+			if (conf.output_level >= DEBUG) {
+				printf("DEBUG: client closed connection\n");
+			}
+
+		} else {
+			
+			if (conf.output_level >= DEBUG) {
+				printf("DEBUG: connection timed out\n");
+			}
+
+		}
+
+	}
+	
+	close(client_sockfd);
 
 	/* free request headers */
 	for (i = 0; i < request.num_headers; i++) {
@@ -114,9 +184,15 @@ void request_handler(int client_sockfd) {
 
 }
 
-void *run() {
+void *run(void *arg) {
 	
-	int sockfd;
+	int *id, sockfd;
+
+	id = (int *) arg;
+
+	if (conf.output_level >= DEBUG) {
+		printf("DEBUG: thread with local id %d running\n", *id);
+	}
 
 	while (1) {
 
@@ -141,7 +217,7 @@ void *run() {
 		
 		/* end of mutex area */
 
-		request_handler(sockfd);
+		request_handler(*id, sockfd);
 
 	}
 }
@@ -162,7 +238,7 @@ int main(int argc, char *argv[]) {
 	int server_sockfd;
 	int sockfd, client_size;
 	
-	int i;
+	int i, tid[MAX_THREADS]; // Local thread id (e.g. 0, 1, 2, 3 ... N)
 
 	struct sockaddr_in server_addr, client_addr;
 	pthread_t thread_id[MAX_THREADS];
@@ -195,9 +271,11 @@ int main(int argc, char *argv[]) {
 
 	/* Wake up threads */
 	for (i = 0; i < MAX_THREADS; i++) {
-		
-		if (pthread_create(&thread_id[i], NULL, run, NULL) != 0) {
-			handle_error("main: pthread_create");
+
+		tid[i] = i;
+
+		if (pthread_create(&thread_id[i], NULL, run, &tid[i]) != 0) {
+			handle_error("pthread_create");
 		}
  
 	}

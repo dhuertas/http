@@ -42,11 +42,18 @@
 #define IS_DS_LAST(str) (str[strlen(str) - 1] == DS)	
 
 /*
+ * CONNECTION
+ */
+#define SOCK_RD			0
+#define SOCK_WR			1
+#define TIME_OUT		10			// Keep Alive timeout 10 seconds
+
+/*
  * ERRORS
  */
 #define handle_error(msg) \
 	do { \
-		fprintf(stderr, "ERROR: file %s at line %d. Caller function %s says %s (%s).\n", __FILE__, __LINE__, __func__, msg, strerror(errno)); \
+		fprintf(stderr, "ERROR: file %s at line %d. Caller function %s says '%s' (%s).\n", __FILE__, __LINE__, __func__, msg, strerror(errno)); \
 		exit(EXIT_FAILURE);\
 	} while (0)
 

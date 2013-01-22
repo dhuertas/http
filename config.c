@@ -176,6 +176,10 @@ void read_config(char *file_path) {
 					conf.directory_index_count++;
 				}
 
+			} else if (strncmp(line, "KeepAliveTimeout ", strlen("KeepAliveTimeout ")) == 0) {
+
+				conf.keep_alive_timeout = atoi((strchr(line, ' ') + sizeof(char)));
+
 			} else {
 
 				/* do nothing */
@@ -215,6 +219,7 @@ void read_config(char *file_path) {
 		}
 		
 		printf("\n");
+		printf("  Keep alive timeout: %d\n", conf.keep_alive_timeout);
 
 	}
 

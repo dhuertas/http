@@ -5,9 +5,10 @@
 #include <stdint.h>
 
 typedef struct config {
-	char *server_name;
-	uint16_t listen_port;
 	uint8_t output_level;
+	uint16_t listen_port;
+	uint16_t keep_alive_timeout;
+	char *server_name;
 	char *document_root;
 	char *http_version;
 	char *charset;

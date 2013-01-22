@@ -15,5 +15,5 @@ typedef struct request {
 } request_t;
 
 void receive_request(int sockfd, char **data);
-uint16_t get_request_header(request_t *req, char *name, char *value);
+uint16_t get_request_header(request_t *req, char *name, char **value);
 void handle_request(int sockfd, request_t *req);

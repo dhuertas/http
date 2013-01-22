@@ -35,7 +35,8 @@ void receive_request(int sockfd, char **data) {
 
 		if (readed + n > MAX_REQ) {
 			/* max size per request has been reached! */
-			handle_error("receive_request: max request size reached");
+			printf("%s\n", *data);
+			break;
 		}
 
 		if (readed + n > (i + 1) * ALLOC_REQ) {
@@ -71,14 +72,14 @@ void receive_request(int sockfd, char **data) {
  * @param value: a pointer to access the header value when found
  * @return: the position of the header in the request struct, -1 otherwise
  */
-uint16_t get_request_header(request_t *req, char *name, char *value) {
+uint16_t get_request_header(request_t *req, char *name, char **value) {
 
 	int i;
 
 	for (i = 0; i < req->num_headers; i++) {
 
 		if (strncmp(req->headers[i]->name, name, strlen(name)) == 0) {
-			value = req->headers[i]->value;
+			*value = req->headers[i]->value;
 			return i;
 		}
 
