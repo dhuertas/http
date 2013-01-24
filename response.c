@@ -31,8 +31,7 @@ void set_response_status(response_t *resp, int status_code, char *reason_phrase)
 
 	resp->status_code = status_code;
 
-	memcpy(resp->reason_phrase, reason_phrase, strlen(reason_phrase));
-	resp->reason_phrase[strlen(reason_phrase)] = '\0';
+	strncat(resp->reason_phrase, reason_phrase, strlen(reason_phrase));
 
 }
 
@@ -59,8 +58,7 @@ void write_response_header(response_t *resp, char *name, char *value) {
 		if (strncmp(resp->headers[i]->name, name, strlen(name)) == 0) {
 
 			/* header already exist */
-			memset(resp->headers[i]->value, 0, strlen(resp->headers[i]->value) + 1);
-			free(resp->headers[i]->value);
+			paranoid_free_string(resp->headers[i]->value);
 			
 			new_length = strlen(value);
 			resp->headers[i]->value = malloc(new_length + 1);
@@ -125,7 +123,7 @@ void append_response_header(response_t *resp, char *name, char *value) {
 
 }
 
-void send_response(int sockfd, request_t *req, response_t *resp) {
+void send_response(int sockfd, response_t *resp) {
 
 	char *buffer;
 	char status_code[4];
@@ -166,16 +164,28 @@ void send_response(int sockfd, request_t *req, response_t *resp) {
 	}
 
 	if ((w = send(sockfd, buffer, strlen(buffer), 0)) != strlen(buffer)) {
-		handle_error("send_response: send");
+		if (errno == EBADF) {
+			if (conf.output_level >= DEBUG) {
+				printf("DEBUG: client closed connection");
+			}
+		} else {
+			handle_error("send");
+		}
 	}
 
 	if (conf.output_level >= VERBOSE) printf("%s\n", buffer);
 
 	if ((w = send(sockfd, "\r\n", strlen("\r\n"), 0)) != strlen("\r\n")) {
-		handle_error("send_response: send");
+		if (errno == EBADF) {
+			if (conf.output_level >= DEBUG) {
+				printf("DEBUG: client closed connection");
+			}
+		} else {
+			handle_error("send");
+		}
 	}
 
-	free(buffer);
+	paranoid_free_string(buffer);
 
 	switch (resp->status_code) {
 
@@ -205,15 +215,51 @@ void handle_response(int sockfd, request_t *req, response_t *resp) {
 	char *connection;
 	char date_buffer[MAX_DATE_SIZE];
 
-	resp->status_code = 0;
-	resp->file_exists = FALSE;
-
 	connection = NULL;
 
 	get_date(date_buffer, "%a, %d %b %Y %H:%M:%S %Z");
 
 	write_response_header(resp, "Date", date_buffer);
 	write_response_header(resp, "Server", conf.server_name);
+
+	switch (req->method) {
+
+		case GET:
+			if (handle_get(req, resp) < 0) {
+				set_response_status(resp, 500, "Internal Server Error");
+			}
+			
+			break;
+
+		case HEAD:
+			set_response_status(resp, 405, "Method Not Allowed");
+			break;
+		
+		case POST:
+			/* Look for "Content-Length" and "Expect" headers before anything else */
+			set_response_status(resp, 405, "Method Not Allowed");
+			break;
+		
+		case PUT:
+			set_response_status(resp, 405, "Method Not Allowed");
+			break;
+		
+		case DELETE:
+			set_response_status(resp, 405, "Method Not Allowed");
+			break;
+		
+		case TRACE:
+			set_response_status(resp, 405, "Method Not Allowed");
+			break;
+		
+		case CONNECT:
+			set_response_status(resp, 405, "Method Not Allowed");
+			break;
+		
+		default:
+			set_response_status(resp, 405, "Method Not Allowed");
+			break;
+	}
 
 	get_request_header(req, "Connection", &connection);
 
@@ -231,53 +277,7 @@ void handle_response(int sockfd, request_t *req, response_t *resp) {
 
 	}
 
-	switch (req->method) {
-
-		case GET:
-			if (handle_get(req, resp) < 0) {
-				set_response_status(resp, 500, "Internal Server Error");
-			}
-			
-			break;
-
-		case HEAD:
-			set_response_status(resp, 405, "Method Not Allowed");
-			write_response_header(resp, "Connection", "Close");
-			break;
-		
-		case POST:
-			/* Look for "Content-Length" and "Expect" headers before anything else */
-			set_response_status(resp, 405, "Method Not Allowed");
-			write_response_header(resp, "Connection", "Close");
-			break;
-		
-		case PUT:
-			set_response_status(resp, 405, "Method Not Allowed");
-			write_response_header(resp, "Connection", "Close");
-			break;
-		
-		case DELETE:
-			set_response_status(resp, 405, "Method Not Allowed");
-			write_response_header(resp, "Connection", "Close");
-			break;
-		
-		case TRACE:
-			set_response_status(resp, 405, "Method Not Allowed");
-			write_response_header(resp, "Connection", "Close");
-			break;
-		
-		case CONNECT:
-			set_response_status(resp, 405, "Method Not Allowed");
-			write_response_header(resp, "Connection", "Close");
-			break;
-		
-		default:
-			set_response_status(resp, 405, "Method Not Allowed");
-			write_response_header(resp, "Connection", "Close");
-			break;
-	}
-
-	send_response(sockfd, req, resp);
+	send_response(sockfd, resp);
 
 }
 
@@ -294,8 +294,10 @@ int handle_get(request_t *req, response_t *resp) {
 
 	struct stat file_info;
 
+	res_path = NULL;
 	file_path = NULL;
 	file_size = NULL;
+	file_ext = NULL;
 	mime_type = NULL;
 	charset = NULL;
 
@@ -317,7 +319,6 @@ int handle_get(request_t *req, response_t *resp) {
 
 		string_length = strlen(res_path);
 		resp->file_path = malloc(string_length + 1);
-
 		memset(resp->file_path, 0, string_length + 1);
 		strncat(resp->file_path, res_path, string_length);
 
@@ -325,7 +326,7 @@ int handle_get(request_t *req, response_t *resp) {
 		/* TODO cgi */
 	}
 
-	free(res_path);
+	paranoid_free_string(res_path);
 
 	if (resp->file_exists) {
 
@@ -364,7 +365,7 @@ int handle_get(request_t *req, response_t *resp) {
 
 			append_response_header(resp, "Content-Type", charset);
 
-			free(charset);
+			paranoid_free_string(charset);
 
 		} else {
 
@@ -373,7 +374,7 @@ int handle_get(request_t *req, response_t *resp) {
 
 			write_response_header(resp, "Content-Length", file_size);
 
-			free(file_size);
+			paranoid_free_string(file_size);
 
 		}
 
@@ -395,4 +396,28 @@ int handle_post(request_t *req, response_t *resp) {
 int handle_head(request_t *req, response_t *resp) {
 	
 	return 0;
+}
+
+void free_response(response_t *resp) {
+
+	int i;
+
+	/* free response */
+	free(resp->reason_phrase);
+
+	if (resp->file_exists > 0) {
+		free(resp->file_path);
+	}
+
+	/* free response headers */
+	for (i = 0; i < resp->num_headers; i++) {
+
+		free(resp->headers[i]->name);
+		free(resp->headers[i]->value);
+		free(resp->headers[i]);
+
+	}
+
+	free(resp->headers);
+
 }

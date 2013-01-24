@@ -73,9 +73,15 @@ void request_handler(int id, int client_sockfd) {
  	i = 0;
 	n = 0;
 
+	/* Init request */
 	request.num_headers = 0;
-	response.num_headers = 0;
+	memset(&(request._mask), 0, sizeof(uint32_t));
 
+	/* Init response */
+	response.num_headers = 0;
+	response.status_code = 0;
+	response.file_exists = FALSE;
+	
 	timeout.tv_sec = TIME_OUT;
 	timeout.tv_usec = 0;
 
@@ -83,12 +89,28 @@ void request_handler(int id, int client_sockfd) {
 		printf("DEBUG: thread %d handling request at socket %d\n", id, client_sockfd);
 	}
 
-	handle_request(client_sockfd, &request);
+	if (handle_request(client_sockfd, &request) < 0) {
+		/* 
+		 * There has been an error with the client request. Notify the client and
+		 * close connection.
+		 */
+		set_response_status(&response, 500, "Internal Server Error");
+		write_response_header(&response, "Connection", "Close");
+
+		send_response(client_sockfd, &response);
+
+		close(client_sockfd);
+
+		free_request(&request);
+		free_response(&response);
+
+		return;
+	}
 
 	get_request_header(&request, "Connection", &connection);
 
 	if (connection == NULL) {
-		/* Some http clients may not send the Connection header ... */
+		/* Some http clients (e.g. curl) may not send the Connection header ... */
 		handle_response(client_sockfd, &request, &response);
 
 	} else if (strncasecmp(connection, "close", strlen("close")) == 0) {
@@ -111,6 +133,9 @@ void request_handler(int id, int client_sockfd) {
 		while ((n = select(client_sockfd + 1, &select_set, NULL, NULL, &timeout)) > 0) {
 
 			if (FD_ISSET(client_sockfd, &select_set)) {
+
+				free_request(&request);
+				free_response(&response);
 
 				if (conf.output_level >= DEBUG) {
 					printf("DEBUG: connection is still open\n");
@@ -143,44 +168,11 @@ void request_handler(int id, int client_sockfd) {
 		}
 
 	}
-	
+
+	free_request(&request);
+	free_response(&response);
+
 	close(client_sockfd);
-
-	/* free request headers */
-	for (i = 0; i < request.num_headers; i++) {
-
-		free(request.headers[i]->name);
-		free(request.headers[i]->value);
-		free(request.headers[i]);
-
-	}
-
-	free(request.headers);
-	free(request.resource);
-	free(request.version);
-	free(request.uri);
-
-	if (request.query_length > 0) {
-		free(request.query);
-	}
-
-	/* free response */
-	free(response.reason_phrase);
-
-	if (response.file_exists > 0) {
-		free(response.file_path);
-	}
-
-	/* free response headers */
-	for (i = 0; i < response.num_headers; i++) {
-
-		free(response.headers[i]->name);
-		free(response.headers[i]->value);
-		free(response.headers[i]);
-
-	}
-
-	free(response.headers);
 
 }
 
@@ -229,7 +221,7 @@ int main(int argc, char *argv[]) {
 		exit(EXIT_FAILURE);
 	}
 
-	printf("Custom HTTP Server 0.1.1\n");
+	printf("Custom HTTP Server 0.1.2\n");
 
 	read_config(argv[1]);
 

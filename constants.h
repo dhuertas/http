@@ -19,10 +19,9 @@
 /*
  * BASICS
  */
-#define ALLOC_REQ		512			// allocate first ALLOC_REQ bytes for requests
-#define MAX_REQ			8192		// 8 KB
 #define TRUE			1
 #define FALSE			0
+#define ERROR			-1
 
 /*
  * HTML METHODS
@@ -53,7 +52,8 @@
  */
 #define handle_error(msg) \
 	do { \
-		fprintf(stderr, "ERROR: file %s at line %d. Caller function %s says '%s' (%s).\n", __FILE__, __LINE__, __func__, msg, strerror(errno)); \
+		fprintf(stderr, "ERROR: file %s at line %d. Caller function %s says '%s' (%s).\n", \
+			__FILE__, __LINE__, __func__, msg, strerror(errno)); \
 		exit(EXIT_FAILURE);\
 	} while (0)
 

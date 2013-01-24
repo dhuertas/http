@@ -226,17 +226,14 @@ int directory_index_lookup(char *dir_path, char **file_path) {
 
 			return i;
 
-		} else if (s == -1) {
+		} else {
 
 			if (conf.output_level >= DEBUG) {
 				printf("DEBUG: file not found %s\n", *file_path);
 			}
-
-		} else {
-
+			
 			memset(*file_path, 0, string_length + 1);
 			free(*file_path);
-
 		}
 
 	}
@@ -261,4 +258,16 @@ int chrpos(char *string, int c) {
 	}
 
 	return -1;
+}
+
+/*
+ * Sets allocated memory to 0 before freeing it
+ *
+ * @param s: string
+ */
+void paranoid_free_string(char *s) {
+
+	memset(s, 0, strlen(s) + 1);
+	free(s);
+
 }

@@ -22,7 +22,7 @@ extern config_t conf;
  * @param sockfd: socket file descriptor to read data from
  * @param data: buffer where readed data will be stored
  */
-void receive_request(int sockfd, char **data) {
+int receive_request(int sockfd, char **data) {
 
 	char chunk[1];
 	uint8_t i;
@@ -33,20 +33,23 @@ void receive_request(int sockfd, char **data) {
 	/* Read byte by byte and look for the end of line */
 	while ((n = read(sockfd, chunk, 1)) > 0) {
 
-		if (readed + n > MAX_REQ) {
+		if (readed + n > _REQUEST_MAX_SIZE) {
 			/* max size per request has been reached! */
-			printf("%s\n", *data);
-			break;
+			if (conf.output_level >= DEBUG) {
+				printf("DEBUG: max request size reached (%d bytes)\n", readed + n);
+			}
+
+			return ERROR;
 		}
 
-		if (readed + n > (i + 1) * ALLOC_REQ) {
+		if (readed + n > (i + 1) * _REQUEST_ALLOC_SIZE) {
 
 			i++;
 
 			if (conf.output_level >= DEBUG) printf("DEBUG: reallocating...\n");
 
-			if ((*data = realloc(*data, readed + ALLOC_REQ)) == NULL) {
-				handle_error("receive_request: realloc");
+			if ((*data = realloc(*data, readed + _REQUEST_ALLOC_SIZE)) == NULL) {
+				handle_error("realloc");
 			}
 
 		}
@@ -55,12 +58,14 @@ void receive_request(int sockfd, char **data) {
 		readed += n;
 
 		/* Read the end of line... backwards */
-		if (readed >= 4 && strncmp(*data + readed-4, "\r\n\r\n", 4) == 0) {
+		if (readed >= 4 && strncmp(*data + readed - 4, "\r\n\r\n", 4) == 0) {
 			if (conf.output_level >= DEBUG) printf("DEBUG: end of request found\n");
 			break;
 		}
 
 	}
+
+	return readed;
 
 }
 
@@ -96,13 +101,11 @@ uint16_t get_request_header(request_t *req, char *name, char **value) {
  * @param sockfd: socket file descriptor to read data from the client
  * @param req: request_t data structure to store the parsed data
  */
-void handle_request(int sockfd, request_t *req) {
+int handle_request(int sockfd, request_t *req) {
 
 	char *buffer = NULL;
 	char *method = NULL;
 	char *query = NULL;
-	char *header_name = NULL;
-	char *header_value = NULL;
 
 	int start, end, pos, tmp;
 	int string_length;
@@ -117,15 +120,18 @@ void handle_request(int sockfd, request_t *req) {
 
 	string_length = 0;
 
-	/* Initialize data structures */
-	req->num_headers = 0;
-	req->query_length = 0;
-
 	/* allocate first 1024 bytes for the request */
-	buffer = malloc(ALLOC_REQ);
-	memset(buffer, 0, ALLOC_REQ);
+	buffer = malloc(_REQUEST_ALLOC_SIZE);
+	memset(buffer, 0, _REQUEST_ALLOC_SIZE);
 
-	receive_request(sockfd, &buffer);
+	if (receive_request(sockfd, &buffer) < 0) {
+		/* There has been an error receiving the client request :( */
+		free(buffer);
+		free_request(req);
+
+		return ERROR;
+
+	}
 
 	if (conf.output_level >= VERBOSE) {
 		printf("%s\n", buffer);
@@ -142,24 +148,10 @@ void handle_request(int sockfd, request_t *req) {
 
 			/* allocate request. REMEMBER TO FREE request AFTER sending response */
 			while (strncmp(&buffer[pos], " ", 1) != 0) pos++;
-			pos++;
-			method = malloc(pos);
-			memcpy(method, buffer, pos);
-			method[pos - 1] = '\0';
-			tmp = pos;
 
-			while (strncmp(&buffer[pos], " ", 1) != 0) pos++;
-			pos++;
-			req->uri = malloc(pos - tmp);
-
-			memcpy(req->uri, &buffer[tmp], pos - tmp);
-			req->uri[pos - tmp - 1] = '\0';
-			tmp = pos;
-
-			while (strncmp(&buffer[pos], "\r\n", 2) != 0) pos++;
-			req->version = malloc(pos - tmp);
-			memcpy(req->version, &buffer[tmp], pos - tmp);
-			req->version[pos - tmp - 1] = '\0';
+			method = malloc(pos + 1);
+			memset(method, 0, pos + 1);
+			strncat(method, buffer, pos);
 
 			for (i = 0; i < 7; i++) {
 				if(strncmp(methods[i], method, strlen(method)) == 0) {
@@ -167,7 +159,31 @@ void handle_request(int sockfd, request_t *req) {
 				}
 			}
 
-			free(method);
+			paranoid_free_string(method);
+
+			pos++;
+			
+			tmp = pos;
+
+			while (strncmp(&buffer[pos], " ", 1) != 0) pos++;
+			
+			req->uri = malloc(pos + 1 - tmp);
+			memset(req->uri, 0, pos + 1 - tmp);
+			strncat(req->uri, &buffer[tmp], pos - tmp);
+			
+			req->_mask |= _REQUEST_URI;
+
+			pos++;
+			
+			tmp = pos;
+
+			while (strncmp(&buffer[pos], "\r\n", 2) != 0) pos++;
+
+			req->version = malloc(pos + 1 - tmp);
+			memset(req->version, 0, pos + 1 - tmp);
+			strncat(req->version, &buffer[tmp], pos - tmp);
+
+			req->_mask |= _REQUEST_VERSION;
 
 		} else {
 
@@ -200,7 +216,7 @@ void handle_request(int sockfd, request_t *req) {
 
 		}
 
-		end += strlen("\r\n");
+		end += 2; // strlen("\r\n");
 		start = end;
 
 	}
@@ -208,7 +224,6 @@ void handle_request(int sockfd, request_t *req) {
 	/* Look for the query part */
 	if (strchr(req->uri, '?') != NULL) {
 
-		/* We may receive an empty query (e.g "/somefile.ext?") */
 		query = strchr(req->uri, '?');
 
 		string_length = strlen(query);
@@ -217,7 +232,7 @@ void handle_request(int sockfd, request_t *req) {
 		memset(req->query, 0, string_length + 1);
 		strncat(req->query, query, string_length);
 
-		req->query_length = string_length;
+		req->_mask |= _REQUEST_QUERY;
 
 		if (conf.output_level >= DEBUG) {
 			printf("DEBUG: query %s\n", req->query);	
@@ -226,8 +241,8 @@ void handle_request(int sockfd, request_t *req) {
 	}
 
 	/* Get the resource requested */
-	if (req->query_length > 0) {
-		string_length = strlen(req->uri) - req->query_length; // Strip query string from uri
+	if (req->_mask & _REQUEST_QUERY) {
+		string_length = strlen(req->uri) - strlen(req->query); // Strip query string from uri
 	} else {
 		string_length = strlen(req->uri);
 	}
@@ -235,13 +250,15 @@ void handle_request(int sockfd, request_t *req) {
 	req->resource = malloc(string_length + 1);
 	memset(req->resource, 0, string_length + 1);
 	strncat(req->resource, req->uri, string_length);
-	req->resource[string_length] = '\0';
+
+	req->_mask |= _REQUEST_RESOURCE;
 
 	string_length = 0;
 
 	/* free buffer */
 	free(buffer);
 
+	return 0;
 	/* 
 	 * TODO; Does the request have a message-body? Look for Transfer-Encoding 
 	 * header. If there is a Transfer-Encoding header we are probably talking to 
@@ -252,4 +269,45 @@ void handle_request(int sockfd, request_t *req) {
 	// if (get_request_header(req, "Content-Length", value) != -1) {
 	//     receive_content(client_sockfd, &buffer);
 	// }
+}
+
+/*
+ * Free the allocated memory for the request struct
+ *
+ * @param req: pointer to a request_t struct
+ */
+void free_request(request_t *req) {
+
+	int i;
+
+	/* free request headers */
+	if (req->num_headers > 0) {
+
+		for (i = 0; i < req->num_headers; i++) {
+
+			paranoid_free_string(req->headers[i]->name);
+			paranoid_free_string(req->headers[i]->value);
+			free(req->headers[i]);
+
+		}
+		
+		free(req->headers);
+
+	}
+
+	if (req->_mask & _REQUEST_MESSAGE) paranoid_free_string(req->message_body);
+	req->_mask &= ~_REQUEST_MESSAGE;
+
+	if (req->_mask & _REQUEST_QUERY) paranoid_free_string(req->query);
+	req->_mask &= ~_REQUEST_QUERY;
+
+	if (req->_mask & _REQUEST_RESOURCE) paranoid_free_string(req->resource);
+	req->_mask &= ~_REQUEST_RESOURCE;
+
+	if (req->_mask & _REQUEST_VERSION) paranoid_free_string(req->version);
+	req->_mask &= ~_REQUEST_VERSION;
+
+	if (req->_mask & _REQUEST_URI) paranoid_free_string(req->uri);
+	req->_mask &= ~_REQUEST_URI;
+
 }
