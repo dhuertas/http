@@ -70,6 +70,16 @@ int receive_request(int sockfd, char **data) {
 }
 
 /*
+ * Reads the data from the socket and puts it in a buffer
+ *
+ * @param sockfd: socket file descriptor to read data from
+ * @param data: buffer where readed data will be stored
+ */
+int receive_message_body(int sockfd, char **data) {
+	
+}
+
+/*
  * Iterate through the header_t content looking for the specified header name
  *
  * @param req: pointer to the request struct
@@ -77,14 +87,14 @@ int receive_request(int sockfd, char **data) {
  * @param value: a pointer to access the header value when found
  * @return: the position of the header in the request struct, -1 otherwise
  */
-uint16_t get_request_header(request_t *req, char *name, char **value) {
+uint16_t get_request_header(request_t *req, char *name, char *value) {
 
 	int i;
 
 	for (i = 0; i < req->num_headers; i++) {
 
 		if (strncmp(req->headers[i]->name, name, strlen(name)) == 0) {
-			*value = req->headers[i]->value;
+			value = req->headers[i]->value;
 			return i;
 		}
 
@@ -258,7 +268,6 @@ int handle_request(int sockfd, request_t *req) {
 	/* free buffer */
 	free(buffer);
 
-	return 0;
 	/* 
 	 * TODO; Does the request have a message-body? Look for Transfer-Encoding 
 	 * header. If there is a Transfer-Encoding header we are probably talking to 
@@ -266,9 +275,13 @@ int handle_request(int sockfd, request_t *req) {
 	 * send a "Content-Length: <length>" and "Expect: 100-continue" headers before 
 	 * sending the message body.
 	 */
-	// if (get_request_header(req, "Content-Length", value) != -1) {
-	//     receive_content(client_sockfd, &buffer);
-	// }
+	
+	//if (get_request_header(req, "Content-Length", value) != -1) {
+		//receive_message_body(client_sockfd, &buffer);
+	//}
+	
+	return 0;
+	
 }
 
 /*

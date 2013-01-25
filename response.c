@@ -264,7 +264,7 @@ void handle_response(int sockfd, request_t *req, response_t *resp) {
 			break;
 	}
 
-	get_request_header(req, "Connection", &connection);
+	get_request_header(req, "Connection", connection);
 
 	if (connection == NULL) {
 

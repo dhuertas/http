@@ -108,7 +108,7 @@ void request_handler(int id, int client_sockfd) {
 		return;
 	}
 
-	get_request_header(&request, "Connection", &connection);
+	get_request_header(&request, "Connection", connection);
 
 	if (connection == NULL) {
 		/* Some http clients (e.g. curl) may not send the Connection header ... */
