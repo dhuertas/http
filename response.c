@@ -27,6 +27,9 @@ void set_response_status(response_t *resp, int status_code, char *reason_phrase)
 	} else {
 		resp->reason_phrase = malloc(strlen(reason_phrase) + 1);
 		memset(resp->reason_phrase, 0, strlen(reason_phrase) + 1);
+		
+		resp->_mask |= _RESPONSE_REASON;
+
 	}
 
 	resp->status_code = status_code;
@@ -310,12 +313,14 @@ int handle_get(request_t *req, response_t *resp) {
 	if (is_dir(res_path)) {
 
 		if (directory_index_lookup(res_path, &(resp->file_path)) >= 0) {
-			resp->file_exists = TRUE;
+			//resp->file_exists = TRUE;
+			resp->_mask |= _RESPONSE_FILE_PATH;
 		}
 
 	} else if (is_file(res_path)) {
 
-		resp->file_exists = TRUE;
+		//resp->file_exists = TRUE;
+		resp->_mask |= _RESPONSE_FILE_PATH;
 
 		string_length = strlen(res_path);
 		resp->file_path = malloc(string_length + 1);
@@ -328,7 +333,8 @@ int handle_get(request_t *req, response_t *resp) {
 
 	paranoid_free_string(res_path);
 
-	if (resp->file_exists) {
+	//if (resp->file_exists) {
+	if (resp->_mask & _RESPONSE_FILE_PATH) {
 
 		set_response_status(resp, 200, "OK");
 
@@ -402,13 +408,6 @@ void free_response(response_t *resp) {
 
 	int i;
 
-	/* free response */
-	free(resp->reason_phrase);
-
-	if (resp->file_exists > 0) {
-		free(resp->file_path);
-	}
-
 	/* free response headers */
 	for (i = 0; i < resp->num_headers; i++) {
 
@@ -419,5 +418,11 @@ void free_response(response_t *resp) {
 	}
 
 	free(resp->headers);
+	
+	if (resp->_mask & _RESPONSE_FILE_PATH) paranoid_free_string(resp->file_path);
+	resp->_mask &= ~_RESPONSE_FILE_PATH;
+
+	if (resp->_mask & _RESPONSE_REASON) paranoid_free_string(resp->reason_phrase);
+	resp->_mask &= ~_RESPONSE_REASON;
 
 }
