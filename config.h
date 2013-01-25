@@ -2,7 +2,8 @@
  * @author dhuertas
  * @email huertas.dani@gmail.com
  */
-#include <stdint.h>
+#ifndef __CONFIG_H
+#define __CONFIG_H
 
 typedef struct config {
 	uint8_t output_level;
@@ -17,3 +18,5 @@ typedef struct config {
 } config_t;
 
 void read_config(char *conf_file_name);
+
+#endif

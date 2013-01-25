@@ -2,6 +2,9 @@
  * @author dhuertas
  * @email huertas.dani@gmail.com
  */
+#ifndef __MIME_H
+#define __MIME_H
+
  typedef struct mime {
  	char *ext;
  	char *type;
@@ -23,3 +26,5 @@ static mime_t mime_types[] = {
 static char default_mime_type[] = "text/html";
 
 int get_mime_type(char *ext, char **mime_type);
+
+#endif

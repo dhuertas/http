@@ -5,6 +5,9 @@
 /* 
  * PERFORMANCE
  */
+#ifndef __CONSTANTS_H
+#define __CONSTANTS_H
+
 #define MAX_LISTEN		30
 #define MAX_THREADS		10
 #define MAX_DATE_SIZE 	64
@@ -58,3 +61,5 @@
 	} while (0)
 
 static char *methods[7] = {"GET", "HEAD", "POST", "PUT", "DELETE", "TRACE", "CONNECT"};
+
+#endif
