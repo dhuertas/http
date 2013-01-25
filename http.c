@@ -79,6 +79,7 @@ void request_handler(int id, int client_sockfd) {
 
 	/* Init response */
 	response.num_headers = 0;
+	memset(&(response._mask), 0, sizeof(uint32_t));
 	response.status_code = 0;
 	response.file_exists = FALSE;
 	
