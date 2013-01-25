@@ -17,6 +17,12 @@
 
 typedef struct request {
 	uint32_t _mask;
+	// mask:
+	// ........ ........ ........ .......x uri
+	// ........ ........ ........ ......x. version
+	// ........ ........ ........ .....x.. resource
+	// ........ ........ ........ ....x... query
+	// ........ ........ ........ ...x.... message 
 	uint16_t num_headers;
 	uint8_t method;
 	char *uri;
