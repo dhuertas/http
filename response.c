@@ -438,13 +438,104 @@ int handle_get(request_t *req, response_t *resp) {
  */
 int handle_post(request_t *req, response_t *resp) {
 
-	char *content_type;
+	char *res_path;
+	char *file_path;
+	char *file_size;
+	char *file_ext;
+	char *mime_type;
+	char *charset;
 
-	/* Look for the content type and do something with the message body */
-	if (get_request_header(req, "Content-Type", &content_type) != -1) {
-		/* Parse data*/
+	int fd, i, s, string_length;
+
+	struct stat file_info;
+
+	res_path = NULL;
+	file_path = NULL;
+	file_size = NULL;
+	file_ext = NULL;
+	mime_type = NULL;
+	charset = NULL;
+
+	string_length = 0;
+
+	if (resource_path(req->resource, &res_path) < 0) {
+		handle_error("resource_path");
 	}
-	
+
+	if (is_dir(res_path)) {
+
+		if (directory_index_lookup(res_path, &(resp->file_path)) >= 0) {
+			//resp->file_exists = TRUE;
+			resp->_mask |= _RESPONSE_FILE_PATH;
+		}
+
+	} else if (is_file(res_path)) {
+
+		//resp->file_exists = TRUE;
+		resp->_mask |= _RESPONSE_FILE_PATH;
+
+		string_length = strlen(res_path);
+		resp->file_path = malloc(string_length + 1);
+		memset(resp->file_path, 0, string_length + 1);
+		strncat(resp->file_path, res_path, string_length);
+
+	} else {	
+		/* TODO cgi */
+	}
+
+	paranoid_free_string(res_path);
+
+	//if (resp->file_exists) {
+	if (resp->_mask & _RESPONSE_FILE_PATH) {
+
+		set_response_status(resp, 200, "OK");
+
+		stat(resp->file_path, &file_info);
+
+		/* Look for mime type */
+		file_ext = strrchr(resp->file_path, '.');
+
+		if (get_mime_type(file_ext, &mime_type) == -1) {
+
+			debug(conf.output_level, "DEBUG: default mime type %s\n", default_mime_type);
+
+			mime_type = default_mime_type;
+
+		} else {
+
+			debug(conf.output_level, "DEBUG: mime type %s\n", mime_type);
+
+		}
+
+		write_response_header(resp, "Content-Type", mime_type);
+
+		/* Append charset when mime type is text */
+		if (strncmp(mime_type, "text", 4) == 0) {
+
+			charset = malloc(strlen("charset=") + strlen(conf.charset) + 1);
+			memset(charset, 0, strlen("charset=") + strlen(conf.charset) + 1);
+			strncat(charset, "charset=", strlen("charset="));
+			strncat(charset, conf.charset, strlen(conf.charset));
+
+			append_response_header(resp, "Content-Type", charset);
+
+			paranoid_free_string(charset);
+
+		}
+
+		/* Get the file length */
+		integer_to_ascii(file_info.st_size, &file_size);
+
+		write_response_header(resp, "Content-Length", file_size);
+
+		paranoid_free_string(file_size);
+
+	} else {
+
+		set_response_status(resp, 404, "Not Found");
+
+	}
+
 	return 0;
 
 }
