@@ -109,7 +109,7 @@ void append_response_header(response_t *resp, char *name, char *value) {
 	int new_length;
 
 	for (i = 0; i < resp->num_headers; i++) {
-		
+
 		if (strncmp(resp->headers[i]->name, name, strlen(name)) == 0) {
 
 			/* header already exist, append it */
@@ -126,7 +126,7 @@ void append_response_header(response_t *resp, char *name, char *value) {
 
 }
 
-void send_response(int sockfd, response_t *resp) {
+void send_response_headers(int sockfd, response_t *resp) {
 
 	char *buffer;
 	char status_code[4];
@@ -167,36 +167,47 @@ void send_response(int sockfd, response_t *resp) {
 	}
 
 	if ((w = send(sockfd, buffer, strlen(buffer), 0)) != strlen(buffer)) {
-		if (errno == EBADF) {
-			if (conf.output_level >= DEBUG) {
-				printf("DEBUG: client closed connection\n");
-			}
+
+		if (errno == EBADF || errno == EPIPE) {
+
+			debug(conf.output_level, "DEBUG: connection problem (%s)\n", strerror(errno));
+
 		} else {
+
 			handle_error("send");
+
 		}
+
 	}
 
-	if (conf.output_level >= VERBOSE) printf("%s\n", buffer);
+	debug(conf.output_level, "%s\n", buffer);
 
-	if ((w = send(sockfd, "\r\n", strlen("\r\n"), 0)) != strlen("\r\n")) {
+	/* Send a new line to end the headers part */
+	if ((w = send(sockfd, "\r\n", 2, 0)) != 2) {
+
 		if (errno == EBADF || errno == EPIPE) {
-			if (conf.output_level >= DEBUG) {
-				printf("DEBUG: %s\n", strerror(errno));
-			}
+
+			debug(conf.output_level, "DEBUG: connection problem (%s)\n", strerror(errno));
+
 		} else {
+
 			handle_error("send");
+
 		}
+
 	}
 
 	paranoid_free_string(buffer);
+
+}
+
+void send_response_content(int sockfd, response_t *resp) {
 
 	switch (resp->status_code) {
 
 		case 200: /* OK */
 		case 304: /* Not Modified */
-
 			send_file(sockfd, resp->file_path);
-
 			break;
 
 		case 404: /* Not found */
@@ -205,11 +216,10 @@ void send_response(int sockfd, response_t *resp) {
 
 		default:
 		case 500: /* Server error */
+			/* TODO custom 404 files :) */
 			break;
 
 	}
-
-	close(sockfd);
 
 }
 
@@ -225,22 +235,68 @@ void handle_response(int sockfd, request_t *req, response_t *resp) {
 	write_response_header(resp, "Date", date_buffer);
 	write_response_header(resp, "Server", conf.server_name);
 
+	get_request_header(req, "Connection", &connection);
+
+	if (connection == NULL) {
+
+		write_response_header(resp, "Connection", "close");
+
+	} else if (strncasecmp(connection, "close", strlen("close")) == 0) {
+
+		write_response_header(resp, "Connection", "close");
+
+	} else {
+
+		write_response_header(resp, "Connection", "keep-alive");
+
+	}
+
 	switch (req->method) {
 
 		case GET:
+
 			if (handle_get(req, resp) < 0) {
+
 				set_response_status(resp, 500, "Internal Server Error");
+				send_response_headers(sockfd, resp);
+
+			} else {
+
+				send_response_headers(sockfd, resp);
+				send_response_content(sockfd, resp);
+
 			}
-			
+
 			break;
 
 		case HEAD:
-			set_response_status(resp, 405, "Method Not Allowed");
+
+			if (handle_head(req, resp) < 0) {
+
+				set_response_status(resp, 500, "Internal Server Error");
+
+			} else {
+
+				send_response_headers(sockfd, resp);
+
+			}
+
 			break;
 		
 		case POST:
-			/* Look for "Content-Length" and "Expect" headers before anything else */
-			set_response_status(resp, 405, "Method Not Allowed");
+
+			if (handle_post(req, resp) < 0) {
+
+				set_response_status(resp, 500, "Internal Server Error");
+				send_response_headers(sockfd, resp);
+
+			} else {
+
+				send_response_headers(sockfd, resp);
+				send_response_content(sockfd, resp);
+
+			}
+			
 			break;
 		
 		case PUT:
@@ -260,27 +316,12 @@ void handle_response(int sockfd, request_t *req, response_t *resp) {
 			break;
 		
 		default:
+			
 			set_response_status(resp, 405, "Method Not Allowed");
+			send_response_headers(sockfd, resp);
+
 			break;
 	}
-
-	get_request_header(req, "Connection", &connection);
-
-	if (connection == NULL) {
-
-		write_response_header(resp, "Connection", "close");
-
-	} else if (strncasecmp(connection, "close", strlen("close")) == 0) {
-
-		write_response_header(resp, "Connection", "close");
-
-	} else {
-
-		write_response_header(resp, "Connection", "keep-alive");
-
-	}
-
-	send_response(sockfd, resp);
 
 }
 
@@ -345,17 +386,13 @@ int handle_get(request_t *req, response_t *resp) {
 
 		if (get_mime_type(file_ext, &mime_type) == -1) {
 
-			if (conf.output_level >= DEBUG){
-				printf("DEBUG: default mime type %s\n", default_mime_type);
-			}
+			debug(conf.output_level, "DEBUG: default mime type %s\n", default_mime_type);
 
 			mime_type = default_mime_type;
 
 		} else {
 
-			if (conf.output_level >= DEBUG) {
-				printf("DEBUG: mime type %s\n", mime_type);
-			}
+			debug(conf.output_level, "DEBUG: mime type %s\n", mime_type);
 
 		}
 
@@ -373,16 +410,14 @@ int handle_get(request_t *req, response_t *resp) {
 
 			paranoid_free_string(charset);
 
-		} else {
-
-			/* Get the file length */
-			integer_to_ascii(file_info.st_size, &file_size);
-
-			write_response_header(resp, "Content-Length", file_size);
-
-			paranoid_free_string(file_size);
-
 		}
+
+		/* Get the file length */
+		integer_to_ascii(file_info.st_size, &file_size);
+
+		write_response_header(resp, "Content-Length", file_size);
+
+		paranoid_free_string(file_size);
 
 	} else {
 
@@ -394,35 +429,164 @@ int handle_get(request_t *req, response_t *resp) {
 
 }
 
+/*
+ * Send the corresponding POST response
+ *
+ * @param req: request_t data structure
+ * @param resp: response_t data structure
+ * @return: 0 on success, -1 on error
+ */
 int handle_post(request_t *req, response_t *resp) {
+
+	char *content_type;
+
+	/* Look for the content type and do something with the message body */
+	if (get_request_header(req, "Content-Type", &content_type) != -1) {
+		/* Parse data*/
+	}
 	
 	return 0;
+
 }
 
+/*
+ * Send only the headers
+ *
+ * @param req: request_t data structure
+ * @param resp: response_t data structure
+ * @return: 0 on success, -1 on error
+ */
 int handle_head(request_t *req, response_t *resp) {
-	
+
+	char *res_path;
+	char *file_path;
+	char *file_size;
+	char *file_ext;
+	char *mime_type;
+	char *charset;
+
+	int fd, i, s, string_length;
+
+	struct stat file_info;
+
+	res_path = NULL;
+	file_path = NULL;
+	file_size = NULL;
+	file_ext = NULL;
+	mime_type = NULL;
+	charset = NULL;
+
+	string_length = 0;
+
+	if (resource_path(req->resource, &res_path) < 0) {
+		handle_error("resource_path");
+	}
+
+	if (is_dir(res_path)) {
+
+		if (directory_index_lookup(res_path, &(resp->file_path)) >= 0) {
+			//resp->file_exists = TRUE;
+			resp->_mask |= _RESPONSE_FILE_PATH;
+		}
+
+	} else if (is_file(res_path)) {
+
+		//resp->file_exists = TRUE;
+		resp->_mask |= _RESPONSE_FILE_PATH;
+
+		string_length = strlen(res_path);
+		resp->file_path = malloc(string_length + 1);
+		memset(resp->file_path, 0, string_length + 1);
+		strncat(resp->file_path, res_path, string_length);
+
+	} else {	
+		/* TODO cgi */
+	}
+
+	paranoid_free_string(res_path);
+
+	//if (resp->file_exists) {
+	if (resp->_mask & _RESPONSE_FILE_PATH) {
+
+		set_response_status(resp, 200, "OK");
+
+		stat(resp->file_path, &file_info);
+
+		/* Look for mime type */
+		file_ext = strrchr(resp->file_path, '.');
+
+		if (get_mime_type(file_ext, &mime_type) == -1) {
+
+			debug(conf.output_level, "DEBUG: default mime type %s\n", default_mime_type);
+
+			mime_type = default_mime_type;
+
+		} else {
+
+			debug(conf.output_level, "DEBUG: mime type %s\n", mime_type);
+
+		}
+
+		write_response_header(resp, "Content-Type", mime_type);
+
+		/* Append charset when mime type is text */
+		if (strncmp(mime_type, "text", 4) == 0) {
+
+			charset = malloc(strlen("charset=") + strlen(conf.charset) + 1);
+			memset(charset, 0, strlen("charset=") + strlen(conf.charset) + 1);
+			strncat(charset, "charset=", strlen("charset="));
+			strncat(charset, conf.charset, strlen(conf.charset));
+
+			append_response_header(resp, "Content-Type", charset);
+
+			paranoid_free_string(charset);
+
+		}
+
+		/* Get the file length */
+		integer_to_ascii(file_info.st_size, &file_size);
+
+		write_response_header(resp, "Content-Length", file_size);
+
+		paranoid_free_string(file_size);
+
+	} else {
+
+		set_response_status(resp, 404, "Not Found");
+
+	}
+
 	return 0;
+
 }
 
 void free_response(response_t *resp) {
 
 	int i;
 
-	/* free response headers */
-	for (i = 0; i < resp->num_headers; i++) {
+	if (resp->num_headers > 0) {
 
-		free(resp->headers[i]->name);
-		free(resp->headers[i]->value);
-		free(resp->headers[i]);
+		/* free response headers */
+		for (i = 0; i < resp->num_headers; i++) {
+
+			free(resp->headers[i]->name);
+			free(resp->headers[i]->value);
+			free(resp->headers[i]);
+
+		}
+
+		free(resp->headers);
+
+		resp->num_headers = 0;
 
 	}
 
-	free(resp->headers);
-	
 	if (resp->_mask & _RESPONSE_FILE_PATH) paranoid_free_string(resp->file_path);
 	resp->_mask &= ~_RESPONSE_FILE_PATH;
 
 	if (resp->_mask & _RESPONSE_REASON) paranoid_free_string(resp->reason_phrase);
 	resp->_mask &= ~_RESPONSE_REASON;
+
+	resp->status_code = 0;
 
 }

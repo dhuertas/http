@@ -36,9 +36,7 @@ int receive_request(int sockfd, char **data) {
 
 		if (readed + n > REQUEST_MAX_SIZE) {
 			/* max size per request has been reached! */
-			if (conf.output_level >= DEBUG) {
-				printf("DEBUG: max request size reached (%d bytes)\n", readed + n);
-			}
+			debug(conf.output_level, "DEBUG: max request size reached (%d bytes)\n", readed + n);
 
 			return ERROR;
 		}
@@ -60,7 +58,7 @@ int receive_request(int sockfd, char **data) {
 
 		/* Read the end of line... backwards */
 		if (readed >= 4 && strncmp(*data + readed - 4, "\r\n\r\n", 4) == 0) {
-			if (conf.output_level >= DEBUG) printf("DEBUG: end of request found\n");
+			debug(conf.output_level, "DEBUG: end of request found\n");
 			break;
 		}
 
@@ -94,9 +92,9 @@ int receive_message_body(int sockfd, char **data, size_t length) {
 		
 		if (received + n > REQUEST_MAX_MESSAGE_SIZE) {
 			/* max size per request has been reached! */
-			if (conf.output_level >= DEBUG) {
-				printf("DEBUG: max message body size reached (%d bytes)\n", received + n);
-			}
+			debug(conf.output_level, 
+				"DEBUG: max message body size reached (%d bytes)\n", 
+				received + n);
 
 			return ERROR;
 		}
@@ -105,7 +103,7 @@ int receive_message_body(int sockfd, char **data, size_t length) {
 
 			i++;
 
-			if (conf.output_level >= DEBUG) printf("DEBUG: reallocating...\n");
+			debug(conf.output_level, "DEBUG: reallocating...\n");
 
 			if ((*data = realloc(*data, received + REQUEST_ALLOC_SIZE)) == NULL) {
 				handle_error("realloc");
@@ -193,9 +191,7 @@ int handle_request(int sockfd, request_t *req) {
 
 	}
 
-	if (conf.output_level >= VERBOSE) {
-		printf("%s\n", buffer);
-	}
+	debug(conf.output_level, "%s\n", buffer);
 
 	while (strncmp(&buffer[start], "\r\n", 2) != 0) {
 
@@ -294,9 +290,7 @@ int handle_request(int sockfd, request_t *req) {
 
 		req->_mask |= _REQUEST_QUERY;
 
-		if (conf.output_level >= DEBUG) {
-			printf("DEBUG: query %s\n", req->query);	
-		}
+		debug(conf.output_level, "DEBUG: query %s\n", req->query);
 
 	}
 
@@ -343,9 +337,8 @@ int handle_request(int sockfd, request_t *req) {
 
 		free(buffer);
 
-		if (conf.output_level >= DEBUG) {
-			printf("DEBUG: message body: %s\n", req->message_body);
-		}
+		debug(conf.output_level, "DEBUG: message body: %s\n", req->message_body);
+
  	}
 
 	return 0;
@@ -371,8 +364,10 @@ void free_request(request_t *req) {
 			free(req->headers[i]);
 
 		}
-		
+
 		free(req->headers);
+
+		req->num_headers = 0;
 
 	}
 
@@ -390,5 +385,7 @@ void free_request(request_t *req) {
 
 	if (req->_mask & _REQUEST_URI) paranoid_free_string(req->uri);
 	req->_mask &= ~_REQUEST_URI;
+
+	req->method = 0;
 
 }

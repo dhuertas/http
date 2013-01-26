@@ -16,8 +16,7 @@
 /* OUTPUT LEVEL */
 #define SILENT			0
 #define NORMAL			1
-#define VERBOSE			2
-#define DEBUG			3
+#define DEBUG			2
 
 /*
  * BASICS
@@ -50,6 +49,7 @@
 #define SOCK_WR			1
 #define TIME_OUT		10			// Keep Alive timeout 10 seconds
 #define RECV_TIME_OUT	10
+
 /*
  * ERRORS
  */
@@ -59,6 +59,13 @@
 			__FILE__, __LINE__, __func__, msg, strerror(errno)); \
 		exit(EXIT_FAILURE);\
 	} while (0)
+
+/*
+ * OUTPUT
+ */
+#define debug(o_level, ...) \
+	if (o_level >= DEBUG) printf(__VA_ARGS__);
+	
 
 static char *methods[7] = {"GET", "HEAD", "POST", "PUT", "DELETE", "TRACE", "CONNECT"};
 

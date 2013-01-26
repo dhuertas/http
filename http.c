@@ -86,9 +86,9 @@ void request_handler(int id, int client_sockfd) {
 	timeout.tv_sec = TIME_OUT;
 	timeout.tv_usec = 0;
 
-	if (conf.output_level >= DEBUG) {
-		printf("DEBUG: thread %d handling request at socket %d\n", id, client_sockfd);
-	}
+	debug(conf.output_level, 
+		"DEBUG: thread %d handling request at socket %d\n", 
+		id, client_sockfd);
 
 	if (handle_request(client_sockfd, &request) < 0) {
 		/* 
@@ -98,7 +98,7 @@ void request_handler(int id, int client_sockfd) {
 		set_response_status(&response, 500, "Internal Server Error");
 		write_response_header(&response, "Connection", "Close");
 
-		send_response(client_sockfd, &response);
+		send_response_headers(client_sockfd, &response);
 
 		close(client_sockfd);
 
@@ -120,9 +120,9 @@ void request_handler(int id, int client_sockfd) {
 
 	} else {
 
-		if (conf.output_level >= DEBUG) {
-			printf("DEBUG: Persistent connection. Connection will remain open for %d seconds\n", TIME_OUT);
-		}
+		debug(conf.output_level, 
+			"DEBUG: Persistent connection. Connection will remain open for %d seconds\n", 
+			TIME_OUT);
 
 		/* Persistent connections are the default behavior in HTTP/1.1 */
 		handle_response(client_sockfd, &request, &response);
@@ -138,9 +138,7 @@ void request_handler(int id, int client_sockfd) {
 				free_request(&request);
 				free_response(&response);
 
-				if (conf.output_level >= DEBUG) {
-					printf("DEBUG: connection is still open\n");
-				}
+				debug(conf.output_level, "DEBUG: connection is still open\n");
 
 				handle_request(client_sockfd, &request);
 
@@ -150,21 +148,19 @@ void request_handler(int id, int client_sockfd) {
 
 		}
 
+		FD_ZERO(&select_set);
+
 		if (n < 0) {
-			
+
 			if (errno != EBADF){
 				handle_error("select");
 			} 
-			
-			if (conf.output_level >= DEBUG) {
-				printf("DEBUG: client closed connection\n");
-			}
+
+			debug(conf.output_level, "DEBUG: client closed connection\n");
 
 		} else {
-			
-			if (conf.output_level >= DEBUG) {
-				printf("DEBUG: connection timed out\n");
-			}
+
+			debug(conf.output_level, "DEBUG: connection timed out\n");
 
 		}
 
@@ -173,7 +169,22 @@ void request_handler(int id, int client_sockfd) {
 	free_request(&request);
 	free_response(&response);
 
-	close(client_sockfd);
+	if (close(client_sockfd) < 0) {
+
+		if (errno == EBADF) {
+
+			debug(conf.output_level, 
+				"DEBUG: problem when closing socket (%s)\n", 
+				strerror(errno));
+			
+		} else if (errno == EIO) {
+			
+			debug(conf.output_level, 
+				"DEBUG: problem when writing in socket before closing it (%s)\n", 
+				strerror(errno));
+
+		}
+	}
 
 }
 
@@ -183,9 +194,7 @@ void *run(void *arg) {
 
 	id = (int *) arg;
 
-	if (conf.output_level >= DEBUG) {
-		printf("DEBUG: thread with local id %d running\n", *id);
-	}
+	debug(conf.output_level, "DEBUG: thread with local id %d running\n", *id);
 
 	while (1) {
 
