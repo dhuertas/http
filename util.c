@@ -31,15 +31,17 @@ void integer_to_ascii(int number, char **result) {
 
 	tmp = number;
 
+	count = 0;
+
 	while (tmp > 0) {
-		
 		tmp /= 10;
 		count++;
 	}
-	
+
 	*result = malloc(count + 1);
-	sprintf(*result, "%d", number);
-	
+	memset(*result, 0, count);
+	snprintf(*result, count + 1, "%d", number);
+
 }
 
 /*
@@ -74,7 +76,7 @@ void send_file(int sockfd, char *file_path) {
 
 	int fd, r, w;
 
-	if (conf.output_level >= DEBUG) printf("DEBUG: sending file %s\n", file_path);
+	debug(conf.output_level, "DEBUG: sending file %s\n", file_path);
 
 	if ((fd = open(file_path, O_RDONLY, 0644)) < 0) {
 		handle_error("sending_file: open");
@@ -217,9 +219,7 @@ int directory_index_lookup(char *dir_path, char **file_path) {
 
 		strncat(*file_path, conf.directory_index[i], strlen(conf.directory_index[i]));
 
-		if (conf.output_level >= DEBUG) {
-			printf("DEBUG: looking for file %s\n", conf.directory_index[i]);
-		}
+		debug(conf.output_level, "DEBUG: looking for file %s\n", conf.directory_index[i]);
 
 		s = stat(*file_path, &file_info);
 
@@ -229,9 +229,7 @@ int directory_index_lookup(char *dir_path, char **file_path) {
 
 		} else {
 
-			if (conf.output_level >= DEBUG) {
-				printf("DEBUG: file not found %s\n", *file_path);
-			}
+			debug(conf.output_level, "DEBUG: file not found %s\n", *file_path);
 			
 			memset(*file_path, 0, string_length + 1);
 			free(*file_path);
