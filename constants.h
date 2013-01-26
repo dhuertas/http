@@ -49,7 +49,7 @@
 #define SOCK_RD			0
 #define SOCK_WR			1
 #define TIME_OUT		10			// Keep Alive timeout 10 seconds
-
+#define RECV_TIME_OUT	10
 /*
  * ERRORS
  */

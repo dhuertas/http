@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <errno.h>
+#include <sys/select.h>
 
 /* local header files */
 #include "constants.h"
@@ -24,7 +25,7 @@ extern config_t conf;
  */
 int receive_request(int sockfd, char **data) {
 
-	char chunk[1];
+	uint8_t chunk[1];
 	uint8_t i;
 	uint32_t readed = 0, n;
 
@@ -33,7 +34,7 @@ int receive_request(int sockfd, char **data) {
 	/* Read byte by byte and look for the end of line */
 	while ((n = read(sockfd, chunk, 1)) > 0) {
 
-		if (readed + n > _REQUEST_MAX_SIZE) {
+		if (readed + n > REQUEST_MAX_SIZE) {
 			/* max size per request has been reached! */
 			if (conf.output_level >= DEBUG) {
 				printf("DEBUG: max request size reached (%d bytes)\n", readed + n);
@@ -42,13 +43,13 @@ int receive_request(int sockfd, char **data) {
 			return ERROR;
 		}
 
-		if (readed + n > (i + 1) * _REQUEST_ALLOC_SIZE) {
+		if (readed + n > (i + 1) * REQUEST_ALLOC_SIZE) {
 
 			i++;
 
 			if (conf.output_level >= DEBUG) printf("DEBUG: reallocating...\n");
 
-			if ((*data = realloc(*data, readed + _REQUEST_ALLOC_SIZE)) == NULL) {
+			if ((*data = realloc(*data, readed + REQUEST_ALLOC_SIZE)) == NULL) {
 				handle_error("realloc");
 			}
 
@@ -75,8 +76,53 @@ int receive_request(int sockfd, char **data) {
  * @param sockfd: socket file descriptor to read data from
  * @param data: buffer where readed data will be stored
  */
-int receive_message_body(int sockfd, char **data) {
-	
+int receive_message_body(int sockfd, char **data, size_t length) {
+
+	int i, n, received;
+
+	uint8_t chunk[1];
+
+	fd_set select_set;
+
+ 	struct timeval timeout;
+
+	i = 0;
+	n = 0;
+	received = 0;
+
+	while ((n = read(sockfd, chunk, 1)) > 0) {
+		
+		if (received + n > REQUEST_MAX_MESSAGE_SIZE) {
+			/* max size per request has been reached! */
+			if (conf.output_level >= DEBUG) {
+				printf("DEBUG: max message body size reached (%d bytes)\n", received + n);
+			}
+
+			return ERROR;
+		}
+
+		if (received + n > (i + 1) * REQUEST_ALLOC_MESSAGE_SIZE) {
+
+			i++;
+
+			if (conf.output_level >= DEBUG) printf("DEBUG: reallocating...\n");
+
+			if ((*data = realloc(*data, received + REQUEST_ALLOC_SIZE)) == NULL) {
+				handle_error("realloc");
+			}
+
+		}
+
+		memcpy(*data + received, chunk, n);
+
+		received += n;
+
+		if (received >= length) break;
+
+	}
+
+	return received;
+
 }
 
 /*
@@ -87,14 +133,14 @@ int receive_message_body(int sockfd, char **data) {
  * @param value: a pointer to access the header value when found
  * @return: the position of the header in the request struct, -1 otherwise
  */
-uint16_t get_request_header(request_t *req, char *name, char *value) {
+int get_request_header(request_t *req, char *name, char **value) {
 
 	int i;
 
 	for (i = 0; i < req->num_headers; i++) {
 
 		if (strncmp(req->headers[i]->name, name, strlen(name)) == 0) {
-			value = req->headers[i]->value;
+			*value = req->headers[i]->value;
 			return i;
 		}
 
@@ -116,9 +162,11 @@ int handle_request(int sockfd, request_t *req) {
 	char *buffer = NULL;
 	char *method = NULL;
 	char *query = NULL;
+	char *content_length = NULL;
 
 	int start, end, pos, tmp;
-	int string_length;
+	int string_length, message_length;
+	int received;
 
 	uint8_t i;
 
@@ -129,10 +177,12 @@ int handle_request(int sockfd, request_t *req) {
 	tmp = 0;
 
 	string_length = 0;
+	message_length = 0;
+	received = 0;
 
 	/* allocate first 1024 bytes for the request */
-	buffer = malloc(_REQUEST_ALLOC_SIZE);
-	memset(buffer, 0, _REQUEST_ALLOC_SIZE);
+	buffer = malloc(REQUEST_ALLOC_SIZE);
+	memset(buffer, 0, REQUEST_ALLOC_SIZE);
 
 	if (receive_request(sockfd, &buffer) < 0) {
 		/* There has been an error receiving the client request :( */
@@ -226,7 +276,7 @@ int handle_request(int sockfd, request_t *req) {
 
 		}
 
-		end += 2; // strlen("\r\n");
+		end += 2;
 		start = end;
 
 	}
@@ -268,20 +318,38 @@ int handle_request(int sockfd, request_t *req) {
 	/* free buffer */
 	free(buffer);
 
-	/* 
-	 * TODO; Does the request have a message-body? Look for Transfer-Encoding 
-	 * header. If there is a Transfer-Encoding header we are probably talking to 
-	 * a HTML/1.0 client, otherwise the expected behavior for the client is to 
-	 * send a "Content-Length: <length>" and "Expect: 100-continue" headers before 
-	 * sending the message body.
-	 */
-	
-	//if (get_request_header(req, "Content-Length", value) != -1) {
-		//receive_message_body(client_sockfd, &buffer);
-	//}
-	
+	if (get_request_header(req, "Content-Length", &content_length) != -1) {
+
+		message_length = atoi(content_length);
+
+		if (message_length > REQUEST_MAX_MESSAGE_SIZE) {
+			return ERROR;
+		}
+
+		buffer = malloc(REQUEST_ALLOC_MESSAGE_SIZE);
+
+		if ((received = receive_message_body(sockfd, &buffer, message_length)) < 0) {
+			/* There has been an error receiving the message body :( */
+			free(buffer);
+			free_request(req);
+			return ERROR;
+		}
+
+		req->message_body = malloc(received + 1);
+		memset(req->message_body, 0, received + 1);
+
+		memcpy(req->message_body, buffer, received);
+		req->_mask |= _REQUEST_MESSAGE;
+
+		free(buffer);
+
+		if (conf.output_level >= DEBUG) {
+			printf("DEBUG: message body: %s\n", req->message_body);
+		}
+ 	}
+
 	return 0;
-	
+
 }
 
 /*

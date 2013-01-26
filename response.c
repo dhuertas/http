@@ -169,7 +169,7 @@ void send_response(int sockfd, response_t *resp) {
 	if ((w = send(sockfd, buffer, strlen(buffer), 0)) != strlen(buffer)) {
 		if (errno == EBADF) {
 			if (conf.output_level >= DEBUG) {
-				printf("DEBUG: client closed connection");
+				printf("DEBUG: client closed connection\n");
 			}
 		} else {
 			handle_error("send");
@@ -179,9 +179,9 @@ void send_response(int sockfd, response_t *resp) {
 	if (conf.output_level >= VERBOSE) printf("%s\n", buffer);
 
 	if ((w = send(sockfd, "\r\n", strlen("\r\n"), 0)) != strlen("\r\n")) {
-		if (errno == EBADF) {
+		if (errno == EBADF || errno == EPIPE) {
 			if (conf.output_level >= DEBUG) {
-				printf("DEBUG: client closed connection");
+				printf("DEBUG: %s\n", strerror(errno));
 			}
 		} else {
 			handle_error("send");
@@ -264,7 +264,7 @@ void handle_response(int sockfd, request_t *req, response_t *resp) {
 			break;
 	}
 
-	get_request_header(req, "Connection", connection);
+	get_request_header(req, "Connection", &connection);
 
 	if (connection == NULL) {
 

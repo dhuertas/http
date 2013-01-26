@@ -5,14 +5,16 @@
 #ifndef __REQUEST_H
 #define __REQUEST_H
 
-#define _REQUEST_ALLOC_SIZE		512			// allocate first 512 bytes for requests
-#define _REQUEST_MAX_SIZE		8192		// 8 KB
+#define REQUEST_ALLOC_SIZE			512			// allocate first 512 bytes for requests
+#define REQUEST_MAX_SIZE			8192		// 8 KB
+#define REQUEST_ALLOC_MESSAGE_SIZE	1048576		// 1 MB
+#define REQUEST_MAX_MESSAGE_SIZE	1073741824	// 1 GB
 
-#define _REQUEST_URI			0x01
-#define _REQUEST_VERSION		0x02
-#define _REQUEST_RESOURCE		0x04
-#define _REQUEST_QUERY			0x08
-#define _REQUEST_MESSAGE		0x10
+#define _REQUEST_URI				0x01
+#define _REQUEST_VERSION			0x02
+#define _REQUEST_RESOURCE			0x04
+#define _REQUEST_QUERY				0x08
+#define _REQUEST_MESSAGE			0x10
 
 
 typedef struct request {
@@ -34,8 +36,8 @@ typedef struct request {
 } request_t;
 
 int receive_request(int sockfd, char **data);
-int receive_message_body(int sockfd, char **data);
-uint16_t get_request_header(request_t *req, char *name, char *value);
+int receive_message_body(int sockfd, char **data, size_t length);
+int get_request_header(request_t *req, char *name, char **value);
 int handle_request(int sockfd, request_t *req);
 void free_request(request_t *req);
 
