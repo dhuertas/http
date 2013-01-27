@@ -28,10 +28,6 @@ int get_mime_type(char *ext, char **mime_type) {
 
 			if (strncmp(mime_types[i].ext, ext, strlen(ext)) == 0) {
 
-				if (conf.output_level >= DEBUG) {
-					printf("DEBUG: mime type %s found\n", mime_types[i].type);
-				}
-
 				*mime_type = mime_types[i].type;
 				break;
 
@@ -43,7 +39,6 @@ int get_mime_type(char *ext, char **mime_type) {
 
 	} else {
 
-		if (conf.output_level >= DEBUG) printf("DEBUG: mime type not found\n");
 		*mime_type = NULL;
 
 	}
