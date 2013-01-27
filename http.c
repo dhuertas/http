@@ -55,7 +55,29 @@ volatile int client_sockfd_count;
 /* Server config */
 config_t conf;
 
-void request_handler(int id, int client_sockfd) {
+void close_conn(int thread_id, int sockfd) {
+
+	if (close(sockfd) < 0) {
+
+		if (errno == EBADF) {
+
+			debug(conf.output_level, 
+				"[%d] DEBUG: problem when closing socket (%s)\n", 
+				thread_id, strerror(errno));
+			
+		} else if (errno == EIO) {
+			
+			debug(conf.output_level, 
+				"[%d] DEBUG: problem when writing in socket before closing it (%s)\n", 
+				thread_id, strerror(errno));
+
+		}
+
+	}
+ 
+}
+
+void request_handler(int thread_id, int client_sockfd) {
 
 	char *connection;
 
@@ -88,7 +110,7 @@ void request_handler(int id, int client_sockfd) {
 
 	debug(conf.output_level, 
 		"[%d] DEBUG: handling request at socket %d\n", 
-		id, client_sockfd);
+		thread_id, client_sockfd);
 
 	/* Wait for data to be received or connection timeout */
 	FD_ZERO(&select_set);
@@ -96,42 +118,52 @@ void request_handler(int id, int client_sockfd) {
 
 	n = select(client_sockfd + 1, &select_set, NULL, NULL, &timeout);
 
-	if (FD_ISSET(client_sockfd, &select_set)) {
-
-		if (handle_request(id, client_sockfd, &request) < 0) {
-			/* 
-			 * There has been an error with the client request. Notify the client and
-			 * close connection.
-			 */
-			set_response_status(&response, 500, "Internal Server Error");
-			write_response_header(&response, "Connection", "Close");
-			send_response_headers(id, client_sockfd, &response);
-
-			close(client_sockfd);
-
-			free_request(&request);
-			free_response(&response);
-
-			return;
-		}
-	
-	}
-
-	FD_CLR(client_sockfd, &select_set);
-	FD_ZERO(&select_set);
-
 	if (n < 0) {
 
 		if (errno != EBADF) {
 			handle_error("select");
 		} 
 
-		debug(conf.output_level, "[%d] DEBUG: client closed connection\n", id);
+		close_conn(thread_id, client_sockfd);
+
+		debug(conf.output_level, 
+			"[%d] DEBUG: client closed connection\n",
+			thread_id);
 
 		free_request(&request);
 		free_response(&response);
 
 		return;
+
+	} else if (n == 0) {
+		
+		debug(conf.output_level, 
+			"[%d] DEBUG: connection timed out\n",
+			thread_id);
+		
+		free_request(&request);
+		free_response(&response);
+
+		return;
+
+	} else {
+
+		if (FD_ISSET(client_sockfd, &select_set)) {
+
+			if (handle_request(thread_id, client_sockfd, &request) < 0) {
+				/* 
+				 * There has been an error with the client request. Close connection.
+				 */
+				close_conn(thread_id, client_sockfd);
+
+				free_request(&request);
+				free_response(&response);
+
+				return;
+
+			}
+
+		}
 
 	}
 
@@ -139,24 +171,20 @@ void request_handler(int id, int client_sockfd) {
 
 	if (connection == NULL) {
 		/* Some http clients (e.g. curl) may not send the Connection header ... */
-		handle_response(id, client_sockfd, &request, &response);
+		handle_response(thread_id, client_sockfd, &request, &response);
 
 	} else if (strncasecmp(connection, "close", strlen("close")) == 0) {
 
-		handle_response(id, client_sockfd, &request, &response);
+		handle_response(thread_id, client_sockfd, &request, &response);
 
 	} else {
 
 		debug(conf.output_level, 
 			"[%d] DEBUG: Persistent connection. Connection will remain open for %d seconds\n", 
-			id, TIME_OUT);
+			thread_id, TIME_OUT);
 
 		/* Persistent connections are the default behavior in HTTP/1.1 */
-		handle_response(id, client_sockfd, &request, &response);
-
-		FD_ZERO(&select_set);
-
-		FD_SET(client_sockfd, &select_set);
+		handle_response(thread_id, client_sockfd, &request, &response);
 
 		while ((n = select(client_sockfd + 1, &select_set, NULL, NULL, &timeout)) > 0) {
 
@@ -167,11 +195,10 @@ void request_handler(int id, int client_sockfd) {
 
 				debug(conf.output_level, 
 					"[%d] DEBUG: connection is still open\n", 
-					id);
+					thread_id);
 
-				handle_request(id, client_sockfd, &request);
-
-				handle_response(id, client_sockfd, &request, &response);
+				handle_request(thread_id, client_sockfd, &request);
+				handle_response(thread_id, client_sockfd, &request, &response);
 
 			}
 
@@ -179,23 +206,10 @@ void request_handler(int id, int client_sockfd) {
 
 	}
 
-	if (close(client_sockfd) < 0) {
+	close_conn(thread_id, client_sockfd);
 
-		if (errno == EBADF) {
-
-			debug(conf.output_level, 
-				"[%d] DEBUG: problem when closing socket (%s)\n", 
-				id, strerror(errno));
-			
-		} else if (errno == EIO) {
-			
-			debug(conf.output_level, 
-				"[%d] DEBUG: problem when writing in socket before closing it (%s)\n", 
-				id, strerror(errno));
-
-		}
-
-	}
+	FD_CLR(client_sockfd, &select_set);
+	FD_ZERO(&select_set);
 
 	free_request(&request);
 	free_response(&response);
@@ -246,7 +260,7 @@ int main(int argc, char *argv[]) {
 		exit(EXIT_FAILURE);
 	}
 
-	printf("Custom HTTP Server 0.1.2\n");
+	printf("Custom HTTP Server 0.1.3\n");
 
 	read_config(argv[1]);
 

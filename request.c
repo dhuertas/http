@@ -28,52 +28,56 @@ int receive_request(int thread_id, int sockfd, char **data) {
 
 	uint8_t chunk[1];
 	uint8_t i;
-	uint32_t readed, n;
+	uint32_t received, n;
 
 	i = 0;
-	readed = 0;
+	received = 0;
 	n = 0;
 
 	/* Read byte by byte and look for the end of line */
 	while ((n = read(sockfd, chunk, 1)) > 0) {
 
-		if (readed + n > REQUEST_MAX_SIZE) {
+		if (received + n > REQUEST_MAX_SIZE) {
 			/* max size per request has been reached! */
 			debug(conf.output_level,
 				"[%d] DEBUG: max request size reached (%d bytes)\n",
-				thread_id, readed + n);
+				thread_id, received + n);
 
 			return ERROR;
+
 		}
 
-		if (readed + n > (i + 1) * REQUEST_ALLOC_SIZE) {
+		if (received + n > (i + 1) * REQUEST_ALLOC_SIZE) {
 
 			i++;
 
-			if (conf.output_level >= DEBUG) printf("DEBUG: reallocating...\n");
+			debug(conf.output_level, 
+				"[%d] DEBUG: reallocating...\n",
+				thread_id);
 
-			if ((*data = realloc(*data, readed + REQUEST_ALLOC_SIZE)) == NULL) {
+			if ((*data = realloc(*data, received + REQUEST_ALLOC_SIZE)) == NULL) {
 				handle_error("realloc");
 			}
 
 		}
 
-		memcpy(*data + readed, chunk, n);
-		readed += n;
+		memcpy(*data + received, chunk, n);
+		received += n;
 
 		/* Read the end of line... backwards */
-		if (readed >= 4 && strncmp(*data + readed - 4, "\r\n\r\n", 4) == 0) {
+		if (received >= 4 && strncmp(*data + received - 4, "\r\n\r\n", 4) == 0) {
 
 			debug(conf.output_level, 
 				"[%d] DEBUG: end of request found\n",
 				thread_id);
 
-			break;
+			return received;
+
 		}
 
 	}
 
-	return readed;
+	return ERROR;
 
 }
 

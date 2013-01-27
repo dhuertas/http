@@ -174,7 +174,7 @@ void send_response_headers(int thread_id, int sockfd, response_t *resp) {
 		if (errno == EBADF || errno == EPIPE) {
 
 			debug(conf.output_level, 
-				"[%d] DEBUG: connection problem (%s)\n", 
+				"[%d] DEBUG: unable to send response headers (%s)\n", 
 				thread_id, strerror(errno));
 
 		} else {
@@ -195,7 +195,7 @@ void send_response_headers(int thread_id, int sockfd, response_t *resp) {
 		if (errno == EBADF || errno == EPIPE) {
 
 			debug(conf.output_level, 
-				"[%d] DEBUG: connection problem (%s)\n", 
+				"[%d] DEBUG: unable to send response new line (%s)\n", 
 				thread_id, strerror(errno));
 
 		} else {
