@@ -20,23 +20,28 @@ extern config_t conf;
 /*
  * Reads the data from the socket and puts it in a buffer
  *
+ * @param thread_id: the thread id handling the request
  * @param sockfd: socket file descriptor to read data from
  * @param data: buffer where readed data will be stored
  */
-int receive_request(int sockfd, char **data) {
+int receive_request(int thread_id, int sockfd, char **data) {
 
 	uint8_t chunk[1];
 	uint8_t i;
-	uint32_t readed = 0, n;
+	uint32_t readed, n;
 
 	i = 0;
+	readed = 0;
+	n = 0;
 
 	/* Read byte by byte and look for the end of line */
 	while ((n = read(sockfd, chunk, 1)) > 0) {
 
 		if (readed + n > REQUEST_MAX_SIZE) {
 			/* max size per request has been reached! */
-			debug(conf.output_level, "DEBUG: max request size reached (%d bytes)\n", readed + n);
+			debug(conf.output_level,
+				"[%d] DEBUG: max request size reached (%d bytes)\n",
+				thread_id, readed + n);
 
 			return ERROR;
 		}
@@ -58,7 +63,11 @@ int receive_request(int sockfd, char **data) {
 
 		/* Read the end of line... backwards */
 		if (readed >= 4 && strncmp(*data + readed - 4, "\r\n\r\n", 4) == 0) {
-			debug(conf.output_level, "DEBUG: end of request found\n");
+
+			debug(conf.output_level, 
+				"[%d] DEBUG: end of request found\n",
+				thread_id);
+
 			break;
 		}
 
@@ -71,10 +80,11 @@ int receive_request(int sockfd, char **data) {
 /*
  * Reads the data from the socket and puts it in a buffer
  *
+ * @param thread_id: the thread id handling the request
  * @param sockfd: socket file descriptor to read data from
  * @param data: buffer where readed data will be stored
  */
-int receive_message_body(int sockfd, char **data, size_t length) {
+int receive_message_body(int thread_id, int sockfd, char **data, size_t length) {
 
 	int i, n, received;
 
@@ -93,8 +103,8 @@ int receive_message_body(int sockfd, char **data, size_t length) {
 		if (received + n > REQUEST_MAX_MESSAGE_SIZE) {
 			/* max size per request has been reached! */
 			debug(conf.output_level, 
-				"DEBUG: max message body size reached (%d bytes)\n", 
-				received + n);
+				"[%d] DEBUG: max message body size reached (%d bytes)\n", 
+				thread_id, received + n);
 
 			return ERROR;
 		}
@@ -103,7 +113,9 @@ int receive_message_body(int sockfd, char **data, size_t length) {
 
 			i++;
 
-			debug(conf.output_level, "DEBUG: reallocating...\n");
+			debug(conf.output_level, 
+				"[%d] DEBUG: reallocating...\n",
+				thread_id);
 
 			if ((*data = realloc(*data, received + REQUEST_ALLOC_SIZE)) == NULL) {
 				handle_error("realloc");
@@ -117,6 +129,10 @@ int receive_message_body(int sockfd, char **data, size_t length) {
 
 		if (received >= length) break;
 
+	}
+
+	if (n < 0) {
+		handle_error("read");
 	}
 
 	return received;
@@ -152,17 +168,18 @@ int get_request_header(request_t *req, char *name, char **value) {
  * Handles the request process. It uses the receive_request function
  * and parses the received data filling a request_t data structure.
  *
+ * @param thread_id: the thread id handling the request
  * @param sockfd: socket file descriptor to read data from the client
  * @param req: request_t data structure to store the parsed data
  */
-int handle_request(int sockfd, request_t *req) {
+int handle_request(int thread_id, int sockfd, request_t *req) {
 
 	char *buffer = NULL;
 	char *method = NULL;
 	char *query = NULL;
 	char *content_length = NULL;
 
-	int start, end, pos, tmp;
+	int start, end, pos, tmp, n;
 	int string_length, message_length;
 	int received;
 
@@ -173,6 +190,7 @@ int handle_request(int sockfd, request_t *req) {
 
 	pos = 0;
 	tmp = 0;
+	n = 0;
 
 	string_length = 0;
 	message_length = 0;
@@ -182,16 +200,23 @@ int handle_request(int sockfd, request_t *req) {
 	buffer = malloc(REQUEST_ALLOC_SIZE);
 	memset(buffer, 0, REQUEST_ALLOC_SIZE);
 
-	if (receive_request(sockfd, &buffer) < 0) {
+	if ((n = receive_request(thread_id, sockfd, &buffer)) < 0) {
 		/* There has been an error receiving the client request :( */
 		free(buffer);
-		free_request(req);
+
+		return ERROR;
+
+	} else if (n == 0) {
+
+		free(buffer);
+
+		debug(conf.output_level, "[%d] empty request\n", thread_id);
 
 		return ERROR;
 
 	}
 
-	debug(conf.output_level, "%s\n", buffer);
+	debug(conf.output_level, "[%d] Request:\n%s\n", thread_id, buffer);
 
 	while (strncmp(&buffer[start], "\r\n", 2) != 0) {
 
@@ -290,7 +315,9 @@ int handle_request(int sockfd, request_t *req) {
 
 		req->_mask |= _REQUEST_QUERY;
 
-		debug(conf.output_level, "DEBUG: query %s\n", req->query);
+		debug(conf.output_level,
+			"[%d] DEBUG: query %s\n",
+			thread_id, req->query);
 
 	}
 
@@ -322,11 +349,12 @@ int handle_request(int sockfd, request_t *req) {
 
 		buffer = malloc(REQUEST_ALLOC_MESSAGE_SIZE);
 
-		if ((received = receive_message_body(sockfd, &buffer, message_length)) < 0) {
+		if ((received = receive_message_body(thread_id, sockfd, &buffer, message_length)) < 0) {
 			/* There has been an error receiving the message body :( */
 			free(buffer);
 			free_request(req);
 			return ERROR;
+
 		}
 
 		req->message_body = malloc(received + 1);
@@ -337,7 +365,9 @@ int handle_request(int sockfd, request_t *req) {
 
 		free(buffer);
 
-		debug(conf.output_level, "DEBUG: message body: %s\n", req->message_body);
+		debug(conf.output_level, 
+			"[%d] DEBUG: message body: %s\n",
+			thread_id, req->message_body);
 
  	}
 

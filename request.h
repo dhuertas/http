@@ -35,10 +35,10 @@ typedef struct request {
 	header_t **headers;
 } request_t;
 
-int receive_request(int sockfd, char **data);
-int receive_message_body(int sockfd, char **data, size_t length);
+int receive_request(int thread_id, int sockfd, char **data);
+int receive_message_body(int thread_id, int sockfd, char **data, size_t length);
 int get_request_header(request_t *req, char *name, char **value);
-int handle_request(int sockfd, request_t *req);
+int handle_request(int thread_id, int sockfd, request_t *req);
 void free_request(request_t *req);
 
 #endif

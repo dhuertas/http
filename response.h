@@ -24,13 +24,13 @@ typedef struct response {
 void set_response_status(response_t *resp, int status_code, char *reason_phrase);
 void write_response_header(response_t *resp, char *name, char *value);
 void append_response_header(response_t *resp, char *name, char *value);
-void send_response_headers(int sockfd, response_t *resp);
-void send_response_content(int sockfd, response_t *resp);
-void handle_response(int sockfd, request_t *req, response_t *resp);
+void send_response_headers(int thread_id, int sockfd, response_t *resp);
+void send_response_content(int thread_id, int sockfd, response_t *resp);
+void handle_response(int thread_id, int sockfd, request_t *req, response_t *resp);
 
-int handle_get(request_t *req, response_t *resp);
-int handle_post(request_t *req, response_t *resp);
-int handle_head(request_t *req, response_t *resp);
+int handle_get(int thread_id, request_t *req, response_t *resp);
+int handle_post(int thread_id, request_t *req, response_t *resp);
+int handle_head(int thread_id, request_t *req, response_t *resp);
 
 void free_response(response_t *resp);
 

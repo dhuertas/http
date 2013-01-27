@@ -126,7 +126,7 @@ void append_response_header(response_t *resp, char *name, char *value) {
 
 }
 
-void send_response_headers(int sockfd, response_t *resp) {
+void send_response_headers(int thread_id, int sockfd, response_t *resp) {
 
 	char *buffer;
 	char status_code[4];
@@ -154,7 +154,10 @@ void send_response_headers(int sockfd, response_t *resp) {
 
 	for (i = 0; i < resp->num_headers; i++) {
 
-		length = strlen(resp->headers[i]->name)+strlen(": ")+strlen(resp->headers[i]->value) + 2;		
+		length = strlen(resp->headers[i]->name)
+			+ 2 // strlen(": ")
+			+ strlen(resp->headers[i]->value)
+			+ 2;		
 
 		buffer = realloc(buffer, strlen(buffer) + length + 1);
 
@@ -170,7 +173,9 @@ void send_response_headers(int sockfd, response_t *resp) {
 
 		if (errno == EBADF || errno == EPIPE) {
 
-			debug(conf.output_level, "DEBUG: connection problem (%s)\n", strerror(errno));
+			debug(conf.output_level, 
+				"[%d] DEBUG: connection problem (%s)\n", 
+				thread_id, strerror(errno));
 
 		} else {
 
@@ -180,14 +185,18 @@ void send_response_headers(int sockfd, response_t *resp) {
 
 	}
 
-	debug(conf.output_level, "%s\n", buffer);
+	debug(conf.output_level, 
+		"[%d] Response:\n%s\n", 
+		thread_id, buffer);
 
 	/* Send a new line to end the headers part */
 	if ((w = send(sockfd, "\r\n", 2, 0)) != 2) {
 
 		if (errno == EBADF || errno == EPIPE) {
 
-			debug(conf.output_level, "DEBUG: connection problem (%s)\n", strerror(errno));
+			debug(conf.output_level, 
+				"[%d] DEBUG: connection problem (%s)\n", 
+				thread_id, strerror(errno));
 
 		} else {
 
@@ -201,7 +210,7 @@ void send_response_headers(int sockfd, response_t *resp) {
 
 }
 
-void send_response_content(int sockfd, response_t *resp) {
+void send_response_content(int thread_id, int sockfd, response_t *resp) {
 
 	switch (resp->status_code) {
 
@@ -223,7 +232,16 @@ void send_response_content(int sockfd, response_t *resp) {
 
 }
 
-void handle_response(int sockfd, request_t *req, response_t *resp) {
+/*
+ * Receives the client request and generates the response corresponding
+ * to the requested method.
+ *
+ * @param thread_id: the thread id handling the request
+ * @param sockfd: the socket stream
+ * @param req: request_t data structure where the request is stored
+ * @param resp: response_t data structure
+ */
+void handle_response(int thread_id, int sockfd, request_t *req, response_t *resp) {
 
 	char *connection;
 	char date_buffer[MAX_DATE_SIZE];
@@ -255,15 +273,15 @@ void handle_response(int sockfd, request_t *req, response_t *resp) {
 
 		case GET:
 
-			if (handle_get(req, resp) < 0) {
+			if (handle_get(thread_id, req, resp) < 0) {
 
 				set_response_status(resp, 500, "Internal Server Error");
-				send_response_headers(sockfd, resp);
+				send_response_headers(thread_id, sockfd, resp);
 
 			} else {
 
-				send_response_headers(sockfd, resp);
-				send_response_content(sockfd, resp);
+				send_response_headers(thread_id, sockfd, resp);
+				send_response_content(thread_id, sockfd, resp);
 
 			}
 
@@ -271,13 +289,13 @@ void handle_response(int sockfd, request_t *req, response_t *resp) {
 
 		case HEAD:
 
-			if (handle_head(req, resp) < 0) {
+			if (handle_head(thread_id, req, resp) < 0) {
 
 				set_response_status(resp, 500, "Internal Server Error");
 
 			} else {
 
-				send_response_headers(sockfd, resp);
+				send_response_headers(thread_id, sockfd, resp);
 
 			}
 
@@ -285,15 +303,15 @@ void handle_response(int sockfd, request_t *req, response_t *resp) {
 		
 		case POST:
 
-			if (handle_post(req, resp) < 0) {
+			if (handle_post(thread_id, req, resp) < 0) {
 
 				set_response_status(resp, 500, "Internal Server Error");
-				send_response_headers(sockfd, resp);
+				send_response_headers(thread_id, sockfd, resp);
 
 			} else {
 
-				send_response_headers(sockfd, resp);
-				send_response_content(sockfd, resp);
+				send_response_headers(thread_id, sockfd, resp);
+				send_response_content(thread_id, sockfd, resp);
 
 			}
 			
@@ -318,14 +336,22 @@ void handle_response(int sockfd, request_t *req, response_t *resp) {
 		default:
 			
 			set_response_status(resp, 405, "Method Not Allowed");
-			send_response_headers(sockfd, resp);
+			send_response_headers(thread_id, sockfd, resp);
 
 			break;
 	}
 
 }
 
-int handle_get(request_t *req, response_t *resp) {
+/*
+ * Generate the corresponding GET response
+ *
+ * @param thread_id: the thread id handling the request
+ * @param req: request_t data structure
+ * @param resp: response_t data structure
+ * @return: 0 on success, -1 on error
+ */
+int handle_get(int thread_id, request_t *req, response_t *resp) {
 
 	char *res_path;
 	char *file_path;
@@ -354,13 +380,13 @@ int handle_get(request_t *req, response_t *resp) {
 	if (is_dir(res_path)) {
 
 		if (directory_index_lookup(res_path, &(resp->file_path)) >= 0) {
-			//resp->file_exists = TRUE;
+
 			resp->_mask |= _RESPONSE_FILE_PATH;
+
 		}
 
 	} else if (is_file(res_path)) {
 
-		//resp->file_exists = TRUE;
 		resp->_mask |= _RESPONSE_FILE_PATH;
 
 		string_length = strlen(res_path);
@@ -374,7 +400,6 @@ int handle_get(request_t *req, response_t *resp) {
 
 	paranoid_free_string(res_path);
 
-	//if (resp->file_exists) {
 	if (resp->_mask & _RESPONSE_FILE_PATH) {
 
 		set_response_status(resp, 200, "OK");
@@ -386,13 +411,17 @@ int handle_get(request_t *req, response_t *resp) {
 
 		if (get_mime_type(file_ext, &mime_type) == -1) {
 
-			debug(conf.output_level, "DEBUG: default mime type %s\n", default_mime_type);
+			debug(conf.output_level,
+				"[%d] DEBUG: default mime type %s\n",
+				thread_id, default_mime_type);
 
 			mime_type = default_mime_type;
 
 		} else {
 
-			debug(conf.output_level, "DEBUG: mime type %s\n", mime_type);
+			debug(conf.output_level,
+				"[%d] DEBUG: mime type %s\n",
+				thread_id, mime_type);
 
 		}
 
@@ -430,13 +459,14 @@ int handle_get(request_t *req, response_t *resp) {
 }
 
 /*
- * Send the corresponding POST response
+ * Generate the corresponding POST response
  *
+ * @param thread_id: the thread id handling the request
  * @param req: request_t data structure
  * @param resp: response_t data structure
  * @return: 0 on success, -1 on error
  */
-int handle_post(request_t *req, response_t *resp) {
+int handle_post(int thread_id, request_t *req, response_t *resp) {
 
 	char *res_path;
 	char *file_path;
@@ -497,13 +527,17 @@ int handle_post(request_t *req, response_t *resp) {
 
 		if (get_mime_type(file_ext, &mime_type) == -1) {
 
-			debug(conf.output_level, "DEBUG: default mime type %s\n", default_mime_type);
+			debug(conf.output_level,
+				"[%d] DEBUG: default mime type %s\n",
+				thread_id, default_mime_type);
 
 			mime_type = default_mime_type;
 
 		} else {
 
-			debug(conf.output_level, "DEBUG: mime type %s\n", mime_type);
+			debug(conf.output_level,
+				"[%d] DEBUG: mime type %s\n",
+				thread_id, mime_type);
 
 		}
 
@@ -541,13 +575,14 @@ int handle_post(request_t *req, response_t *resp) {
 }
 
 /*
- * Send only the headers
+ * Generate only the headers
  *
+ * @param thread_id: the thread id handling the request
  * @param req: request_t data structure
  * @param resp: response_t data structure
  * @return: 0 on success, -1 on error
  */
-int handle_head(request_t *req, response_t *resp) {
+int handle_head(int thread_id, request_t *req, response_t *resp) {
 
 	char *res_path;
 	char *file_path;
@@ -576,13 +611,13 @@ int handle_head(request_t *req, response_t *resp) {
 	if (is_dir(res_path)) {
 
 		if (directory_index_lookup(res_path, &(resp->file_path)) >= 0) {
-			//resp->file_exists = TRUE;
+
 			resp->_mask |= _RESPONSE_FILE_PATH;
+
 		}
 
 	} else if (is_file(res_path)) {
 
-		//resp->file_exists = TRUE;
 		resp->_mask |= _RESPONSE_FILE_PATH;
 
 		string_length = strlen(res_path);
@@ -596,7 +631,6 @@ int handle_head(request_t *req, response_t *resp) {
 
 	paranoid_free_string(res_path);
 
-	//if (resp->file_exists) {
 	if (resp->_mask & _RESPONSE_FILE_PATH) {
 
 		set_response_status(resp, 200, "OK");
@@ -608,13 +642,17 @@ int handle_head(request_t *req, response_t *resp) {
 
 		if (get_mime_type(file_ext, &mime_type) == -1) {
 
-			debug(conf.output_level, "DEBUG: default mime type %s\n", default_mime_type);
+			debug(conf.output_level,
+				"[%d] DEBUG: default mime type %s\n",
+				thread_id, default_mime_type);
 
 			mime_type = default_mime_type;
 
 		} else {
 
-			debug(conf.output_level, "DEBUG: mime type %s\n", mime_type);
+			debug(conf.output_level,
+				"[%d] DEBUG: mime type %s\n",
+				thread_id, mime_type);
 
 		}
 
