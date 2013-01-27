@@ -127,13 +127,21 @@ void read_config(char *file_path) {
 
 				conf.listen_port = atoi(strchr(line, ' ') + sizeof(char));
 
-			} else if (strncmp(line, "Charset ", strlen("Charset ")) == 0) {
+			} else if (strncmp(line, "DefaultCharset ", strlen("DefaultCharset ")) == 0) {
 
-				length = line_length - strlen("Charset ");
+				length = line_length - strlen("DefaultCharset ");
 
 				conf.charset = malloc(length + 1);
 				memset(conf.charset, 0, length + 1);
 				strncat(conf.charset, value, length);
+
+			} else if (strncmp(line, "DefaultType ", strlen("DefaultType ")) == 0) {
+
+				length = line_length - strlen("DefaultType ");
+
+				conf.default_type = malloc(length + 1);
+				memset(conf.default_type, 0, length + 1);
+				strncat(conf.default_type, value, length);
 
 			} else if (strncmp(line, "OutputLevel ", strlen("OutputLevel ")) == 0) {
 
@@ -181,6 +189,10 @@ void read_config(char *file_path) {
 
 				conf.keep_alive_timeout = atoi((strchr(line, ' ') + sizeof(char)));
 
+			} else if (strncmp(line, "RequestTimeout ", strlen("RequestTimeout ")) == 0) {
+
+				conf.request_timeout = atoi((strchr(line, ' ') + sizeof(char)));
+
 			} else {
 
 				/* do nothing */
@@ -212,6 +224,7 @@ void read_config(char *file_path) {
 		printf("  Document root: %s\n", conf.document_root);
 		printf("  Listen port: %d\n", conf.listen_port);
 		printf("  Default charset: %s\n", conf.charset);
+		printf("  Default type: %s\n", conf.default_type);
 		printf("  Output level: %d\n", conf.output_level);
 		printf("  Directory index: ");
 	
@@ -221,6 +234,7 @@ void read_config(char *file_path) {
 		
 		printf("\n");
 		printf("  Keep alive timeout: %d\n", conf.keep_alive_timeout);
+		printf("  Request timeout: %d\n", conf.request_timeout);
 
 	}
 

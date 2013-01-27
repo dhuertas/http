@@ -413,9 +413,9 @@ int handle_get(int thread_id, request_t *req, response_t *resp) {
 
 			debug(conf.output_level,
 				"[%d] DEBUG: default mime type %s\n",
-				thread_id, default_mime_type);
+				thread_id, conf.default_type);
 
-			mime_type = default_mime_type;
+			mime_type = conf.default_type;
 
 		} else {
 
@@ -529,9 +529,9 @@ int handle_post(int thread_id, request_t *req, response_t *resp) {
 
 			debug(conf.output_level,
 				"[%d] DEBUG: default mime type %s\n",
-				thread_id, default_mime_type);
+				thread_id, conf.default_type);
 
-			mime_type = default_mime_type;
+			mime_type = conf.default_type;
 
 		} else {
 
@@ -644,9 +644,9 @@ int handle_head(int thread_id, request_t *req, response_t *resp) {
 
 			debug(conf.output_level,
 				"[%d] DEBUG: default mime type %s\n",
-				thread_id, default_mime_type);
+				thread_id, conf.default_type);
 
-			mime_type = default_mime_type;
+			mime_type = conf.default_type;
 
 		} else {
 

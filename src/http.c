@@ -105,7 +105,7 @@ void request_handler(int thread_id, int client_sockfd) {
 	response.status_code = 0;
 	response.file_exists = FALSE;
 	
-	timeout.tv_sec = TIME_OUT;
+	timeout.tv_sec = conf.request_timeout;
 	timeout.tv_usec = 0;
 
 	debug(conf.output_level, 
@@ -180,8 +180,11 @@ void request_handler(int thread_id, int client_sockfd) {
 	} else {
 
 		debug(conf.output_level, 
-			"[%d] DEBUG: Persistent connection. Connection will remain open for %d seconds\n", 
+			"[%d] DEBUG: Connection keep alive (%d seconds)\n", 
 			thread_id, TIME_OUT);
+
+		timeout.tv_sec = conf.keep_alive_timeout;
+		timeout.tv_usec = 0;
 
 		/* Persistent connections are the default behavior in HTTP/1.1 */
 		handle_response(thread_id, client_sockfd, &request, &response);
@@ -203,6 +206,24 @@ void request_handler(int thread_id, int client_sockfd) {
 			}
 
 		}
+
+	}
+
+	if (n < 0) {
+
+		if (errno != EBADF) {
+			handle_error("select");
+		}
+
+		debug(conf.output_level, 
+			"[%d] DEBUG: client closed connection\n",
+			thread_id);
+
+	} else if (n == 0) {
+
+		debug(conf.output_level, 
+			"[%d] DEBUG: connection timed out\n",
+			thread_id);
 
 	}
 

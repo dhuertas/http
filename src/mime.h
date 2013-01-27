@@ -23,8 +23,6 @@ static mime_t mime_types[] = {
 	{"txt", 	"text/plain"}
 };
 
-static char default_mime_type[] = "text/html";
-
 int get_mime_type(char *ext, char **mime_type);
 
 #endif
