@@ -87,45 +87,72 @@ void request_handler(int id, int client_sockfd) {
 	timeout.tv_usec = 0;
 
 	debug(conf.output_level, 
-		"DEBUG: thread %d handling request at socket %d\n", 
+		"[%d] DEBUG: handling request at socket %d\n", 
 		id, client_sockfd);
 
-	if (handle_request(client_sockfd, &request) < 0) {
-		/* 
-		 * There has been an error with the client request. Notify the client and
-		 * close connection.
-		 */
-		set_response_status(&response, 500, "Internal Server Error");
-		write_response_header(&response, "Connection", "Close");
+	/* Wait for data to be received or connection timeout */
+	FD_ZERO(&select_set);
+	FD_SET(client_sockfd, &select_set);
 
-		send_response_headers(client_sockfd, &response);
+	n = select(client_sockfd + 1, &select_set, NULL, NULL, &timeout);
 
-		close(client_sockfd);
+	if (FD_ISSET(client_sockfd, &select_set)) {
+
+		if (handle_request(id, client_sockfd, &request) < 0) {
+			/* 
+			 * There has been an error with the client request. Notify the client and
+			 * close connection.
+			 */
+			set_response_status(&response, 500, "Internal Server Error");
+			write_response_header(&response, "Connection", "Close");
+			send_response_headers(id, client_sockfd, &response);
+
+			close(client_sockfd);
+
+			free_request(&request);
+			free_response(&response);
+
+			return;
+		}
+	
+	}
+
+	FD_CLR(client_sockfd, &select_set);
+	FD_ZERO(&select_set);
+
+	if (n < 0) {
+
+		if (errno != EBADF) {
+			handle_error("select");
+		} 
+
+		debug(conf.output_level, "[%d] DEBUG: client closed connection\n", id);
 
 		free_request(&request);
 		free_response(&response);
 
 		return;
+
 	}
 
 	get_request_header(&request, "Connection", &connection);
 
 	if (connection == NULL) {
 		/* Some http clients (e.g. curl) may not send the Connection header ... */
-		handle_response(client_sockfd, &request, &response);
+		handle_response(id, client_sockfd, &request, &response);
 
 	} else if (strncasecmp(connection, "close", strlen("close")) == 0) {
 
-		handle_response(client_sockfd, &request, &response);
+		handle_response(id, client_sockfd, &request, &response);
 
 	} else {
 
 		debug(conf.output_level, 
-			"DEBUG: Persistent connection. Connection will remain open for %d seconds\n", 
-			TIME_OUT);
+			"[%d] DEBUG: Persistent connection. Connection will remain open for %d seconds\n", 
+			id, TIME_OUT);
 
 		/* Persistent connections are the default behavior in HTTP/1.1 */
-		handle_response(client_sockfd, &request, &response);
+		handle_response(id, client_sockfd, &request, &response);
 
 		FD_ZERO(&select_set);
 
@@ -138,29 +165,33 @@ void request_handler(int id, int client_sockfd) {
 				free_request(&request);
 				free_response(&response);
 
-				debug(conf.output_level, "DEBUG: connection is still open\n");
+				debug(conf.output_level, 
+					"[%d] DEBUG: connection is still open\n", 
+					id);
 
-				handle_request(client_sockfd, &request);
+				handle_request(id, client_sockfd, &request);
 
-				handle_response(client_sockfd, &request, &response);
+				handle_response(id, client_sockfd, &request, &response);
 
 			}
 
 		}
 
-		FD_ZERO(&select_set);
+	}
 
-		if (n < 0) {
+	if (close(client_sockfd) < 0) {
 
-			if (errno != EBADF){
-				handle_error("select");
-			} 
+		if (errno == EBADF) {
 
-			debug(conf.output_level, "DEBUG: client closed connection\n");
-
-		} else {
-
-			debug(conf.output_level, "DEBUG: connection timed out\n");
+			debug(conf.output_level, 
+				"[%d] DEBUG: problem when closing socket (%s)\n", 
+				id, strerror(errno));
+			
+		} else if (errno == EIO) {
+			
+			debug(conf.output_level, 
+				"[%d] DEBUG: problem when writing in socket before closing it (%s)\n", 
+				id, strerror(errno));
 
 		}
 
@@ -168,23 +199,6 @@ void request_handler(int id, int client_sockfd) {
 
 	free_request(&request);
 	free_response(&response);
-
-	if (close(client_sockfd) < 0) {
-
-		if (errno == EBADF) {
-
-			debug(conf.output_level, 
-				"DEBUG: problem when closing socket (%s)\n", 
-				strerror(errno));
-			
-		} else if (errno == EIO) {
-			
-			debug(conf.output_level, 
-				"DEBUG: problem when writing in socket before closing it (%s)\n", 
-				strerror(errno));
-
-		}
-	}
 
 }
 
@@ -194,7 +208,7 @@ void *run(void *arg) {
 
 	id = (int *) arg;
 
-	debug(conf.output_level, "DEBUG: thread with local id %d running\n", *id);
+	debug(conf.output_level, "[%d] DEBUG: thread with local id %d running\n", *id, *id);
 
 	while (1) {
 
@@ -222,6 +236,7 @@ void *run(void *arg) {
 		request_handler(*id, sockfd);
 
 	}
+
 }
 
 int main(int argc, char *argv[]) {
