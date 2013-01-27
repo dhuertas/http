@@ -3,11 +3,11 @@ http
 
 A custom, multi-threaded http web server.
 
-This project is for fun and learning purposes only.
+Warning! This project is for fun and learning purposes only.
 
 ## Compile
-* Under http folder: `gcc -o bin/httpd ./src/*.c`
+* Under http folder do: `gcc -o bin/httpd ./src/*.c` (you may need to add `-lpthread` or `-pthread`).
 
 ## Execute
-* Setup `httpd.conf` config file.
-* Under http folder: `./bin/httpd ./config/httpd.conf`
+* Setup the `httpd.conf` config file.
+* Under http folder do `./bin/httpd ./config/httpd.conf`.
