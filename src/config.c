@@ -189,6 +189,10 @@ void read_config(char *file_path) {
 
 				conf.keep_alive_timeout = atoi((strchr(line, ' ') + sizeof(char)));
 
+			} else if (strncmp(line, "MaxKeepAliveRequests ", strlen("MaxKeepAliveRequests ")) == 0) {
+
+					conf.max_keep_alive_requests = atoi((strchr(line, ' ') + sizeof(char)));
+
 			} else if (strncmp(line, "RequestTimeout ", strlen("RequestTimeout ")) == 0) {
 
 				conf.request_timeout = atoi((strchr(line, ' ') + sizeof(char)));
@@ -227,13 +231,14 @@ void read_config(char *file_path) {
 		printf("  Default type: %s\n", conf.default_type);
 		printf("  Output level: %d\n", conf.output_level);
 		printf("  Directory index: ");
-	
+
 		for (i = 0; i < conf.directory_index_count; i++) {
 			printf("%s ", conf.directory_index[i]);
 		}
-		
+
 		printf("\n");
 		printf("  Keep alive timeout: %d\n", conf.keep_alive_timeout);
+		printf("  Max keep alive requests: %d\n", conf.max_keep_alive_requests);
 		printf("  Request timeout: %d\n", conf.request_timeout);
 
 	}

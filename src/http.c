@@ -81,7 +81,7 @@ void request_handler(int thread_id, int client_sockfd) {
 
 	char *connection;
 
-	int i, n;
+	int i, n, req_count;
 
 	fd_set select_set;
  
@@ -94,6 +94,7 @@ void request_handler(int thread_id, int client_sockfd) {
 
  	i = 0;
 	n = 0;
+	req_count = 0;
 
 	/* Init request */
 	request.num_headers = 0;
@@ -203,8 +204,19 @@ void request_handler(int thread_id, int client_sockfd) {
 				handle_request(thread_id, client_sockfd, &request);
 				handle_response(thread_id, client_sockfd, &request, &response);
 
+				req_count++;
+
 			}
 
+			if (req_count > conf.max_keep_alive_requests) {
+
+				debug(conf.output_level, 
+					"[%d] DEBUG: Max keep alive requests reached\n", 
+					thread_id);
+
+				break;
+
+			}
 		}
 
 	}
