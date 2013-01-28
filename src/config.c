@@ -49,6 +49,7 @@ void read_config(char *file_path) {
 	strncat(conf.http_version, "HTTP/1.1", strlen("HTTP/1.1"));
 
 	conf.directory_index_count = 0;
+	conf.error_documents_count = 0;
 
 	if ((fd = open(file_path, O_RDONLY, 0644)) < 0) {
 		handle_error("server_config: open");
@@ -104,6 +105,24 @@ void read_config(char *file_path) {
 				conf.server_name = malloc(length + 1);
 				memset(conf.server_name, 0, length + 1);
 				strncat(conf.server_name, value, strlen(value));
+
+			} else if (strncmp(line, "ServerRoot ", strlen("ServerRoot ")) == 0) {
+
+				length = line_length - strlen("ServerRoot ");
+
+				if (strncmp(&line[line_length - 1], "/", 1) == 0) {
+
+					conf.server_root = malloc(length);
+					memset(conf.server_root, 0, length);
+					strncat(conf.server_root, value, length - 1);
+
+				} else {
+
+					conf.server_root = malloc(length + 1);
+					memset(conf.server_root, 0, length + 1);
+					strncat(conf.server_root, value, length);
+
+				}
 
 			} else if (strncmp(line, "DocumentRoot ", strlen("DocumentRoot ")) == 0) {
 
@@ -183,6 +202,7 @@ void read_config(char *file_path) {
 					memset(conf.directory_index[count], 0, length + 1);
 					strncat(conf.directory_index[count], &value[i-length], length);
 					conf.directory_index_count++;
+
 				}
 
 			} else if (strncmp(line, "KeepAliveTimeout ", strlen("KeepAliveTimeout ")) == 0) {
@@ -197,6 +217,30 @@ void read_config(char *file_path) {
 
 				conf.request_timeout = atoi((strchr(line, ' ') + sizeof(char)));
 
+			} else if (strncmp(line, "ErrorDocument ", strlen("ErrorDocument ")) == 0) {
+				
+				if (conf.error_documents_count == 0) {
+
+					conf.error_documents = malloc(sizeof(error_document_t *));
+
+				} else {
+
+					conf.error_documents = realloc(
+						conf.error_documents, 
+						(conf.error_documents_count + 1) * sizeof(error_document_t *));
+
+				}
+
+				conf.error_documents[conf.error_documents_count] = malloc(sizeof(error_document_t));
+				conf.error_documents[conf.error_documents_count]->file_path = malloc(strlen(strrchr(value, ' ') + sizeof(char)) + 1);
+				memset(conf.error_documents[conf.error_documents_count]->file_path, 0, strlen(strrchr(value, ' ') + sizeof(char)) + 1);
+
+				sscanf(value, "%d %s", 
+					&(conf.error_documents[conf.error_documents_count]->status_code), 
+					conf.error_documents[conf.error_documents_count]->file_path);
+
+				conf.error_documents_count++;
+				
 			} else {
 
 				/* do nothing */
@@ -225,7 +269,8 @@ void read_config(char *file_path) {
 	if (conf.output_level >= DEBUG) {
 
 		printf("Server configuration:\n");
-		printf("  Document root: %s\n", conf.document_root);
+		printf("  Server root folder: %s\n", conf.server_root);
+		printf("  Document root folder: %s\n", conf.document_root);
 		printf("  Listen port: %d\n", conf.listen_port);
 		printf("  Default charset: %s\n", conf.charset);
 		printf("  Default type: %s\n", conf.default_type);
@@ -237,9 +282,18 @@ void read_config(char *file_path) {
 		}
 
 		printf("\n");
+
 		printf("  Keep alive timeout: %d\n", conf.keep_alive_timeout);
 		printf("  Max keep alive requests: %d\n", conf.max_keep_alive_requests);
 		printf("  Request timeout: %d\n", conf.request_timeout);
+
+		printf("  Error documents:\n");
+
+		for (i = 0; i < conf.error_documents_count; i++) {
+			printf("    %d %s\n", 
+				conf.error_documents[i]->status_code, 
+				conf.error_documents[i]->file_path);
+		}
 
 	}
 

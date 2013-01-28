@@ -135,7 +135,7 @@ void request_handler(int thread_id, int client_sockfd) {
 		debug(conf.output_level, 
 			"[%d] DEBUG: connection timed out\n",
 			thread_id);
-		
+
 		free_request(&request);
 		free_response(&response);
 
@@ -287,7 +287,7 @@ int main(int argc, char *argv[]) {
 		exit(EXIT_FAILURE);
 	}
 
-	printf("%s (version %s). %s\n", name, version, author);
+	printf("%s (version %s)\n", name, version);
 
 	read_config(argv[1]);
 

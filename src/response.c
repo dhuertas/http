@@ -212,21 +212,9 @@ void send_response_headers(int thread_id, int sockfd, response_t *resp) {
 
 void send_response_content(int thread_id, int sockfd, response_t *resp) {
 
-	switch (resp->status_code) {
+	if (resp->_mask & _RESPONSE_FILE_PATH) {
 
-		case 200: /* OK */
-		case 304: /* Not Modified */
-			send_file(sockfd, resp->file_path);
-			break;
-
-		case 404: /* Not found */
-			/* TODO custom 404 files :) */
-			break;
-
-		default:
-		case 500: /* Server error */
-			/* TODO custom 404 files :) */
-			break;
+		send_file(sockfd, resp->file_path);
 
 	}
 
@@ -245,6 +233,8 @@ void handle_response(int thread_id, int sockfd, request_t *req, response_t *resp
 
 	char *connection;
 	char date_buffer[MAX_DATE_SIZE];
+
+	int i;
 
 	connection = NULL;
 
@@ -276,6 +266,7 @@ void handle_response(int thread_id, int sockfd, request_t *req, response_t *resp
 			if (handle_get(thread_id, req, resp) < 0) {
 
 				set_response_status(resp, 500, "Internal Server Error");
+				set_error_document(thread_id, resp, 500);
 				send_response_headers(thread_id, sockfd, resp);
 
 			} else {
@@ -306,6 +297,7 @@ void handle_response(int thread_id, int sockfd, request_t *req, response_t *resp
 			if (handle_post(thread_id, req, resp) < 0) {
 
 				set_response_status(resp, 500, "Internal Server Error");
+				set_error_document(thread_id, resp, 500);
 				send_response_headers(thread_id, sockfd, resp);
 
 			} else {
@@ -314,31 +306,32 @@ void handle_response(int thread_id, int sockfd, request_t *req, response_t *resp
 				send_response_content(thread_id, sockfd, resp);
 
 			}
-			
+
 			break;
-		
+
 		case PUT:
 			set_response_status(resp, 405, "Method Not Allowed");
 			break;
-		
+
 		case DELETE:
 			set_response_status(resp, 405, "Method Not Allowed");
 			break;
-		
+
 		case TRACE:
 			set_response_status(resp, 405, "Method Not Allowed");
 			break;
-		
+
 		case CONNECT:
 			set_response_status(resp, 405, "Method Not Allowed");
 			break;
-		
+
 		default:
-			
+
 			set_response_status(resp, 405, "Method Not Allowed");
 			send_response_headers(thread_id, sockfd, resp);
 
 			break;
+
 	}
 
 }
@@ -451,6 +444,7 @@ int handle_get(int thread_id, request_t *req, response_t *resp) {
 	} else {
 
 		set_response_status(resp, 404, "Not Found");
+		set_error_document(thread_id, resp, 404);
 
 	}
 
@@ -567,7 +561,7 @@ int handle_post(int thread_id, request_t *req, response_t *resp) {
 	} else {
 
 		set_response_status(resp, 404, "Not Found");
-
+		set_error_document(thread_id, resp, 404);
 	}
 
 	return 0;
@@ -686,6 +680,118 @@ int handle_head(int thread_id, request_t *req, response_t *resp) {
 	}
 
 	return 0;
+
+}
+
+void set_error_document(int thread_id, response_t *resp, int status_code) {
+
+	char *res_path;
+	char *file_size;
+	char *file_ext;
+	char *mime_type;
+	char *charset;
+
+	int i, string_length;
+
+	struct stat file_info;
+
+	res_path = NULL;
+	file_size = NULL;
+	file_ext = NULL;
+	mime_type = NULL;
+	charset = NULL;
+
+	i = 0;
+	string_length = 0;
+
+	for (i = 0; i < conf.error_documents_count; i++) {
+
+		if (conf.error_documents[i]->status_code == status_code) {
+
+			if (conf.error_documents[i]->file_path[0] == '/') {
+				/* Absolute path */
+				string_length = strlen(conf.error_documents[i]->file_path);
+
+				res_path = malloc(string_length + 1);
+				memset(res_path, 0, string_length + 1);
+
+				snprintf(res_path, string_length + 1, " %s", conf.error_documents[i]->file_path);
+
+			} else {
+				/* Path is relative to server root folder */
+				string_length = strlen(conf.server_root) 
+					+ 1 
+					+ strlen(conf.error_documents[i]->file_path);
+
+				res_path = malloc(string_length + 1);
+				memset(res_path, 0, string_length);
+
+				snprintf(res_path, string_length + 1, "%s/%s", 
+					conf.server_root, 
+					conf.error_documents[i]->file_path);	
+			}
+
+			if (is_file(res_path)) {
+
+				resp->file_path = malloc(string_length + 1);
+				memset(resp->file_path, 0, string_length + 1);
+				strncat(resp->file_path, res_path, string_length);
+
+				resp->_mask |= _RESPONSE_FILE_PATH;
+				
+				stat(resp->file_path, &file_info);
+
+				/* Look for mime type */
+				file_ext = strrchr(resp->file_path, '.');
+
+				if (get_mime_type(file_ext, &mime_type) == -1) {
+
+					debug(conf.output_level,
+						"[%d] DEBUG: default mime type %s\n",
+						thread_id, conf.default_type);
+
+					mime_type = conf.default_type;
+
+				} else {
+
+					debug(conf.output_level,
+						"[%d] DEBUG: mime type %s\n",
+						thread_id, mime_type);
+
+				}
+
+				write_response_header(resp, "Content-Type", mime_type);
+
+				/* Append charset when mime type is text */
+				if (strncmp(mime_type, "text", 4) == 0) {
+
+					charset = malloc(strlen("charset=") + strlen(conf.charset) + 1);
+					memset(charset, 0, strlen("charset=") + strlen(conf.charset) + 1);
+					strncat(charset, "charset=", strlen("charset="));
+					strncat(charset, conf.charset, strlen(conf.charset));
+
+					append_response_header(resp, "Content-Type", charset);
+
+					paranoid_free_string(charset);
+
+				}
+
+				/* Get the file length */
+				integer_to_ascii(file_info.st_size, &file_size);
+
+				write_response_header(resp, "Content-Length", file_size);
+
+				paranoid_free_string(file_size);
+				
+			}
+
+			paranoid_free_string(res_path);
+
+			break;
+
+		}
+
+	}
 
 }
 

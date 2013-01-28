@@ -32,6 +32,7 @@ int handle_get(int thread_id, request_t *req, response_t *resp);
 int handle_post(int thread_id, request_t *req, response_t *resp);
 int handle_head(int thread_id, request_t *req, response_t *resp);
 
+void set_error_document(int thread_id, response_t *resp, int status_code);
 void free_response(response_t *resp);
 
 #endif
