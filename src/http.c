@@ -55,23 +55,17 @@ volatile int client_sockfd_count;
 /* Server config */
 config_t conf;
 
+static const char *name = "ARiSO HTTP web server";
+static const char *version = "0.1.3";
+static const char *author = "Dani Huertas";
+
 void close_conn(int thread_id, int sockfd) {
 
 	if (close(sockfd) < 0) {
 
-		if (errno == EBADF) {
-
-			debug(conf.output_level, 
-				"[%d] DEBUG: problem when closing socket (%s)\n", 
-				thread_id, strerror(errno));
-			
-		} else if (errno == EIO) {
-			
-			debug(conf.output_level, 
-				"[%d] DEBUG: problem when writing in socket before closing it (%s)\n", 
-				thread_id, strerror(errno));
-
-		}
+		debug(conf.output_level, 
+			"[%d] DEBUG: error closing socket (%s)\n", 
+			thread_id, strerror(errno));
 
 	}
  
@@ -293,7 +287,7 @@ int main(int argc, char *argv[]) {
 		exit(EXIT_FAILURE);
 	}
 
-	printf("Custom HTTP Server 0.1.3\n");
+	printf("%s (version %s). %s\n", name, version, author);
 
 	read_config(argv[1]);
 
@@ -301,7 +295,7 @@ int main(int argc, char *argv[]) {
 
 	int server_sockfd;
 	int sockfd, client_size;
-	
+
 	int i, tid[MAX_THREADS]; // Local thread id (e.g. 0, 1, 2, 3 ... N)
 
 	struct sockaddr_in server_addr, client_addr;
@@ -348,7 +342,7 @@ int main(int argc, char *argv[]) {
 
 		sockfd = accept(server_sockfd, (struct sockaddr *) &client_addr, &client_size);
 
-		/* enter of mutex area */
+		/* start of mutex area */
 		pthread_mutex_lock(&mutex_sockfd);
 
 		while (client_sockfd_count > MAX_THREADS) {
@@ -365,7 +359,7 @@ int main(int argc, char *argv[]) {
 		pthread_cond_broadcast(&cond_sockfd_empty);
 		pthread_mutex_unlock(&mutex_sockfd);
 
-		/* exit mutex area */
+		/* end of mutex area */
 
 		get_date(date_buffer, "%H:%M:%S, %a %b %d %Y");
 
@@ -377,7 +371,7 @@ int main(int argc, char *argv[]) {
 	for (i = 0; i < MAX_THREADS; i++) {
 	    pthread_join(thread_id[i], NULL);
 	}
-	  
+
 	pthread_cond_destroy(&cond_sockfd_empty);
 	pthread_cond_destroy(&cond_sockfd_full);
 	pthread_mutex_destroy(&mutex_sockfd);
