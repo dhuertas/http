@@ -283,6 +283,8 @@ void *run(void *arg) {
 int main(int argc, char *argv[]) {
 
 	char *cvalue = NULL;
+	char *ovalue = NULL;
+
 	int aflag = 0;
 	int bflag = 0;
 	int index;
@@ -290,7 +292,7 @@ int main(int argc, char *argv[]) {
      
 	opterr = 0;
 
-	while ((c = getopt (argc, argv, "c:")) != -1) {
+	while ((c = getopt (argc, argv, "c:o:")) != -1) {
 
 		switch (c) {
 			/* Comment this and leave it for future use */
@@ -310,9 +312,14 @@ int main(int argc, char *argv[]) {
 				cvalue = optarg;
 				break;
 
+			case 'o':
+				/* Output file option */
+				ovalue = optarg;
+				break;
+
 			case '?':
 
-				if (optopt == 'c') {
+				if (optopt == 'c' || optopt == 'o') {
 					fprintf (stderr, "Option -%c requires an argument\n", optopt);
 				} else if (isprint(optopt)) {
 					fprintf (stderr, "Unknown option `-%c'\n", optopt);
@@ -320,9 +327,10 @@ int main(int argc, char *argv[]) {
 					fprintf (stderr, "Unknown option character `\\x%x'\n", optopt);
 				}
 
+				
 				exit(0);
 
-			default: abort();
+			default: break;
 
 		}
 	}
@@ -332,8 +340,15 @@ int main(int argc, char *argv[]) {
 	}
 
 	if (cvalue == NULL) {
-		printf("Usage: %s -c config_file\n", argv[0]);
+		printf("Usage: %s -c config_file [-o output_file]\n", argv[0]);
 		exit(EXIT_FAILURE);
+	}
+
+	if (ovalue != NULL) {
+		close(1);
+		if (open(ovalue, O_WRONLY|O_CREAT|O_APPEND, 0644) < 0) {
+			handle_error("open");
+		}
 	}
 
 	printf("%s (version %s)\n", name, version);
