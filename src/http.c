@@ -266,7 +266,7 @@ void *run(void *arg) {
 		sockfd = client_sockfd[client_sockfd_rd];
 
 		client_sockfd_rd++;
-		client_sockfd_rd = client_sockfd_rd % MAX_THREADS;
+		client_sockfd_rd = client_sockfd_rd % conf.thread_pool_size;
 		client_sockfd_count--;
 
 		pthread_cond_broadcast(&cond_sockfd_full);
@@ -360,10 +360,10 @@ int main(int argc, char *argv[]) {
 	int server_sockfd;
 	int sockfd, client_size;
 
-	int i, tid[MAX_THREADS]; // Local thread id (e.g. 0, 1, 2, 3 ... N)
+	int i, tid[conf.thread_pool_size]; // Local thread id (e.g. 0, 1, 2, 3 ... N)
 
 	struct sockaddr_in server_addr, client_addr;
-	pthread_t thread_id[MAX_THREADS];
+	pthread_t thread_id[conf.thread_pool_size];
 
 	server_sockfd = socket(PF_INET, SOCK_STREAM, 0);
 
@@ -392,7 +392,7 @@ int main(int argc, char *argv[]) {
 	client_sockfd_wr = 0;
 
 	/* Wake up threads */
-	for (i = 0; i < MAX_THREADS; i++) {
+	for (i = 0; i < conf.thread_pool_size; i++) {
 
 		tid[i] = i;
 
@@ -409,7 +409,7 @@ int main(int argc, char *argv[]) {
 		/* start of mutex area */
 		pthread_mutex_lock(&mutex_sockfd);
 
-		while (client_sockfd_count > MAX_THREADS) {
+		while (client_sockfd_count > conf.thread_pool_size) {
 			pthread_cond_wait(&cond_sockfd_full, &mutex_sockfd);
 		}
 
@@ -417,7 +417,7 @@ int main(int argc, char *argv[]) {
 
 		client_sockfd_count++;
 		client_sockfd_wr++;
-		client_sockfd_wr = client_sockfd_wr % MAX_THREADS;
+		client_sockfd_wr = client_sockfd_wr % conf.thread_pool_size;
 
 		
 		pthread_cond_broadcast(&cond_sockfd_empty);
@@ -432,7 +432,7 @@ int main(int argc, char *argv[]) {
 
 	}
 
-	for (i = 0; i < MAX_THREADS; i++) {
+	for (i = 0; i < conf.thread_pool_size; i++) {
 	    pthread_join(thread_id[i], NULL);
 	}
 

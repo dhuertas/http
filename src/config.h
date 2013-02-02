@@ -14,8 +14,9 @@ typedef struct config {
 	uint8_t output_level;
 	uint16_t listen_port;
 	uint16_t keep_alive_timeout;
-	uint32_t max_keep_alive_requests;
 	uint16_t request_timeout;
+	uint32_t max_keep_alive_requests;
+	uint32_t thread_pool_size;
 	char *server_name;
 	char *server_root;
 	char *document_root;
