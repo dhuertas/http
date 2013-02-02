@@ -1,0 +1,132 @@
+ARiSO HTTP web server (version 0.1.3)
+Server configuration:
+  Server root folder: /Users/dani/Github/http
+  Document root folder: ./htdocs
+  Listen port: 8080
+  Default charset: UTF-8
+  Default type: text/html
+  Output level: 3
+  Directory index: index.html index.htm index.php index.asp 
+  Keep alive timeout: 10
+  Max keep alive requests: 500
+  Request timeout: 1
+  Error documents:
+    404 doc/error/404.html
+    500 doc/error/500.html
+[0] DEBUG: thread with local id 0 running
+[1] DEBUG: thread with local id 1 running
+[2] DEBUG: thread with local id 2 running
+[3] DEBUG: thread with local id 3 running
+[4] DEBUG: thread with local id 4 running
+[5] DEBUG: thread with local id 5 running
+[6] DEBUG: thread with local id 6 running
+[7] DEBUG: thread with local id 7 running
+[8] DEBUG: thread with local id 8 running
+[9] DEBUG: thread with local id 9 running
+[0] DEBUG: handling request at socket 4
+[13:42:05, Sat Feb 02 2013] 127.0.0.1 
+[13:42:05, Sat Feb 02 2013] 127.0.0.1 
+[1] DEBUG: handling request at socket 5
+[0] DEBUG: end of request found
+[0] Request:
+GET / HTTP/1.1
+Host: localhost:8080
+Connection: keep-alive
+Cache-Control: max-age=0
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_7_5) AppleWebKit/537.17 (KHTML, like Gecko) Chrome/24.0.1312.57 Safari/537.17
+DNT: 1
+Accept-Encoding: gzip,deflate,sdch
+Accept-Language: es-ES,es;q=0.8
+Accept-Charset: ISO-8859-1,utf-8;q=0.7,*;q=0.3
+
+
+[0] DEBUG: Connection keep alive (10 seconds)
+[0] DEBUG: mime type text/html
+[0] Response:
+HTTP/1.1 200 OK
+Date: Sat, 02 Feb 2013 13:42:05 CET
+Server: webserver
+Connection: keep-alive
+Content-Type: text/html; charset=UTF-8
+Content-Length: 147
+
+[0] DEBUG: connection is still open
+[0] DEBUG: end of request found
+[0] Request:
+GET /favicon.ico HTTP/1.1
+Host: localhost:8080
+Connection: keep-alive
+Accept: */*
+DNT: 1
+User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_7_5) AppleWebKit/537.17 (KHTML, like Gecko) Chrome/24.0.1312.57 Safari/537.17
+Accept-Encoding: gzip,deflate,sdch
+Accept-Language: es-ES,es;q=0.8
+Accept-Charset: ISO-8859-1,utf-8;q=0.7,*;q=0.3
+
+
+[0] DEBUG: mime type text/html
+[0] Response:
+HTTP/1.1 404 Not Found
+Date: Sat, 02 Feb 2013 13:42:05 CET
+Server: webserver
+Connection: keep-alive
+Content-Type: text/html; charset=UTF-8
+Content-Length: 167
+
+[1] DEBUG: connection timed out
+[0] DEBUG: connection is still open
+[0] DEBUG: end of request found
+[0] Request:
+GET /te HTTP/1.1
+Host: localhost:8080
+Connection: keep-alive
+Cache-Control: max-age=0
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_7_5) AppleWebKit/537.17 (KHTML, like Gecko) Chrome/24.0.1312.57 Safari/537.17
+DNT: 1
+Accept-Encoding: gzip,deflate,sdch
+Accept-Language: es-ES,es;q=0.8
+Accept-Charset: ISO-8859-1,utf-8;q=0.7,*;q=0.3
+
+
+[0] DEBUG: mime type text/html
+[0] Response:
+HTTP/1.1 404 Not Found
+Date: Sat, 02 Feb 2013 13:42:08 CET
+Server: webserver
+Connection: keep-alive
+Content-Type: text/html; charset=UTF-8
+Content-Length: 167
+
+[0] DEBUG: connection is still open
+[0] DEBUG: end of request found
+[0] Request:
+GET /favicon.ico HTTP/1.1
+Host: localhost:8080
+Connection: keep-alive
+Accept: */*
+DNT: 1
+User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_7_5) AppleWebKit/537.17 (KHTML, like Gecko) Chrome/24.0.1312.57 Safari/537.17
+Accept-Encoding: gzip,deflate,sdch
+Accept-Language: es-ES,es;q=0.8
+Accept-Charset: ISO-8859-1,utf-8;q=0.7,*;q=0.3
+
+
+[0] DEBUG: mime type text/html
+[0] Response:
+HTTP/1.1 404 Not Found
+Date: Sat, 02 Feb 2013 13:42:08 CET
+Server: webserver
+Connection: keep-alive
+Content-Type: text/html; charset=UTF-8
+Content-Length: 167
+
+[0] DEBUG: connection is still open
+[0] DEBUG: end of request found
+[0] Request:
+GET /test HTTP/1.1
+Host: localhost:8080
+Connection: keep-alive
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_7_5) AppleWebKit/537.17 (KHTML, like Gecko) Chrome/24.0.1312.5
