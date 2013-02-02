@@ -266,7 +266,7 @@ void *run(void *arg) {
 		sockfd = client_sockfd[client_sockfd_rd];
 
 		client_sockfd_rd++;
-		client_sockfd_rd = client_sockfd_rd % MAX_THREADS;
+		client_sockfd_rd = client_sockfd_rd % conf.thread_pool_size;
 		client_sockfd_count--;
 
 		pthread_cond_broadcast(&cond_sockfd_full);
@@ -282,24 +282,88 @@ void *run(void *arg) {
 
 int main(int argc, char *argv[]) {
 
-	if (argc != 2) {
-		printf("Usage: %s config_file\n", argv[0]);
+	char *cvalue = NULL;
+	char *ovalue = NULL;
+
+	int aflag = 0;
+	int bflag = 0;
+	int index;
+	int c;
+     
+	opterr = 0;
+
+	while ((c = getopt (argc, argv, "c:o:")) != -1) {
+
+		switch (c) {
+			/* Comment this and leave it for future use */
+			/*
+			case 'a':
+
+				aflag = 1;
+				break;
+
+			case 'b':
+
+				bflag = 1;
+				break;
+			*/
+			case 'c':
+				/* Config option */
+				cvalue = optarg;
+				break;
+
+			case 'o':
+				/* Output file option */
+				ovalue = optarg;
+				break;
+
+			case '?':
+
+				if (optopt == 'c' || optopt == 'o') {
+					fprintf (stderr, "Option -%c requires an argument\n", optopt);
+				} else if (isprint(optopt)) {
+					fprintf (stderr, "Unknown option `-%c'\n", optopt);
+				} else {
+					fprintf (stderr, "Unknown option character `\\x%x'\n", optopt);
+				}
+
+				
+				exit(0);
+
+			default: break;
+
+		}
+	}
+
+	for (index = optind; index < argc; index++) {
+		printf ("Non-option argument %s\n", argv[index]);
+	}
+
+	if (cvalue == NULL) {
+		printf("Usage: %s -c config_file [-o output_file]\n", argv[0]);
 		exit(EXIT_FAILURE);
+	}
+
+	if (ovalue != NULL) {
+		close(1);
+		if (open(ovalue, O_WRONLY|O_CREAT|O_APPEND, 0644) < 0) {
+			handle_error("open");
+		}
 	}
 
 	printf("%s (version %s)\n", name, version);
 
-	read_config(argv[1]);
+	read_config(cvalue);
 
 	char date_buffer[MAX_DATE_SIZE];
 
 	int server_sockfd;
 	int sockfd, client_size;
 
-	int i, tid[MAX_THREADS]; // Local thread id (e.g. 0, 1, 2, 3 ... N)
+	int i, tid[conf.thread_pool_size]; // Local thread id (e.g. 0, 1, 2, 3 ... N)
 
 	struct sockaddr_in server_addr, client_addr;
-	pthread_t thread_id[MAX_THREADS];
+	pthread_t thread_id[conf.thread_pool_size];
 
 	server_sockfd = socket(PF_INET, SOCK_STREAM, 0);
 
@@ -328,7 +392,7 @@ int main(int argc, char *argv[]) {
 	client_sockfd_wr = 0;
 
 	/* Wake up threads */
-	for (i = 0; i < MAX_THREADS; i++) {
+	for (i = 0; i < conf.thread_pool_size; i++) {
 
 		tid[i] = i;
 
@@ -345,7 +409,7 @@ int main(int argc, char *argv[]) {
 		/* start of mutex area */
 		pthread_mutex_lock(&mutex_sockfd);
 
-		while (client_sockfd_count > MAX_THREADS) {
+		while (client_sockfd_count > conf.thread_pool_size) {
 			pthread_cond_wait(&cond_sockfd_full, &mutex_sockfd);
 		}
 
@@ -353,7 +417,7 @@ int main(int argc, char *argv[]) {
 
 		client_sockfd_count++;
 		client_sockfd_wr++;
-		client_sockfd_wr = client_sockfd_wr % MAX_THREADS;
+		client_sockfd_wr = client_sockfd_wr % conf.thread_pool_size;
 
 		
 		pthread_cond_broadcast(&cond_sockfd_empty);
@@ -368,7 +432,7 @@ int main(int argc, char *argv[]) {
 
 	}
 
-	for (i = 0; i < MAX_THREADS; i++) {
+	for (i = 0; i < conf.thread_pool_size; i++) {
 	    pthread_join(thread_id[i], NULL);
 	}
 

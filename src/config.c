@@ -162,6 +162,10 @@ void read_config(char *file_path) {
 				memset(conf.default_type, 0, length + 1);
 				strncat(conf.default_type, value, length);
 
+			} else if (strncmp(line, "ThreadPoolSize ", strlen("ThreadPoolSize ")) == 0) {
+
+				conf.thread_pool_size = atoi((strchr(line, ' ') + sizeof(char)));
+			
 			} else if (strncmp(line, "OutputLevel ", strlen("OutputLevel ")) == 0) {
 
 				conf.output_level = atoi((strchr(line, ' ') + sizeof(char)));
@@ -274,6 +278,7 @@ void read_config(char *file_path) {
 		printf("  Listen port: %d\n", conf.listen_port);
 		printf("  Default charset: %s\n", conf.charset);
 		printf("  Default type: %s\n", conf.default_type);
+		printf("  Thread pool size: %d\n", conf.thread_pool_size);
 		printf("  Output level: %d\n", conf.output_level);
 		printf("  Directory index: ");
 
