@@ -282,14 +282,63 @@ void *run(void *arg) {
 
 int main(int argc, char *argv[]) {
 
-	if (argc != 2) {
-		printf("Usage: %s config_file\n", argv[0]);
+	char *cvalue = NULL;
+	int aflag = 0;
+	int bflag = 0;
+	int index;
+	int c;
+     
+	opterr = 0;
+
+	while ((c = getopt (argc, argv, "c:")) != -1) {
+
+		switch (c) {
+			/* Comment this and leave it for future use */
+			/*
+			case 'a':
+
+				aflag = 1;
+				break;
+
+			case 'b':
+
+				bflag = 1;
+				break;
+			*/
+			case 'c':
+				/* Config option */
+				cvalue = optarg;
+				break;
+
+			case '?':
+
+				if (optopt == 'c') {
+					fprintf (stderr, "Option -%c requires an argument\n", optopt);
+				} else if (isprint(optopt)) {
+					fprintf (stderr, "Unknown option `-%c'\n", optopt);
+				} else {
+					fprintf (stderr, "Unknown option character `\\x%x'\n", optopt);
+				}
+
+				exit(0);
+
+			default: abort();
+
+		}
+	}
+
+	for (index = optind; index < argc; index++) {
+		printf ("Non-option argument %s\n", argv[index]);
+	}
+
+	if (cvalue == NULL) {
+		printf("Usage: %s -c config_file\n", argv[0]);
 		exit(EXIT_FAILURE);
 	}
 
 	printf("%s (version %s)\n", name, version);
 
-	read_config(argv[1]);
+	read_config(cvalue);
 
 	char date_buffer[MAX_DATE_SIZE];
 
