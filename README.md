@@ -10,4 +10,4 @@ Warning! This project is for fun and learning purposes only.
 
 ## Execute
 * Setup the `httpd.conf` config file.
-* Under http folder do `./bin/httpd ./config/httpd.conf`.
+* Under http folder do `./bin/httpd -c ./config/httpd.conf`.
