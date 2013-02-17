@@ -47,7 +47,7 @@
 pthread_cond_t cond_sockfd_full, cond_sockfd_empty;
 pthread_mutex_t mutex_sockfd;
 
-volatile int client_sockfd[MAX_THREADS];
+volatile int *client_sockfd;
 volatile int client_sockfd_rd;
 volatile int client_sockfd_wr;
 volatile int client_sockfd_count;
@@ -253,7 +253,7 @@ void *run(void *arg) {
 
 	while (1) {
 
-		/* start of mutex area */
+		// start of mutex area
 
 		pthread_mutex_lock(&mutex_sockfd);
 
@@ -272,7 +272,7 @@ void *run(void *arg) {
 		pthread_cond_broadcast(&cond_sockfd_full);
 		pthread_mutex_unlock(&mutex_sockfd);
 		
-		/* end of mutex area */
+		// end of mutex area
 
 		request_handler(*id, sockfd);
 
@@ -295,7 +295,7 @@ int main(int argc, char *argv[]) {
 	while ((c = getopt (argc, argv, "c:o:")) != -1) {
 
 		switch (c) {
-			/* Comment this and leave it for future use */
+			// Comment this and leave it for future use
 			/*
 			case 'a':
 
@@ -308,12 +308,12 @@ int main(int argc, char *argv[]) {
 				break;
 			*/
 			case 'c':
-				/* Config option */
+				// Config option
 				cvalue = optarg;
 				break;
 
 			case 'o':
-				/* Output file option */
+				// Output file option
 				ovalue = optarg;
 				break;
 
@@ -360,14 +360,18 @@ int main(int argc, char *argv[]) {
 	int server_sockfd;
 	int sockfd, client_size;
 
-	int i, tid[conf.thread_pool_size]; // Local thread id (e.g. 0, 1, 2, 3 ... N)
+	// Local thread id (e.g. 0, 1, 2, 3 ... N)
+	int i, tid[conf.thread_pool_size];
 
 	struct sockaddr_in server_addr, client_addr;
 	pthread_t thread_id[conf.thread_pool_size];
 
+	// Initialize the client_sockfd array
+	client_sockfd = malloc(conf.thread_pool_size*sizeof(int));
+	
 	server_sockfd = socket(PF_INET, SOCK_STREAM, 0);
 
-	/* Initialize addr structs */
+	// Initialize addr structs
 	memset(&server_addr, 0, sizeof(server_addr));
 	memset(&client_addr, 0, sizeof(client_addr));
 
@@ -382,7 +386,7 @@ int main(int argc, char *argv[]) {
 
 	client_size = sizeof(client_addr);
 
-	/* Initialize threads mutex and conditions */
+	// Initialize threads mutex and conditions
 	pthread_mutex_init(&mutex_sockfd, NULL);
 	pthread_cond_init(&cond_sockfd_empty, NULL);
 	pthread_cond_init(&cond_sockfd_full, NULL);
@@ -391,7 +395,7 @@ int main(int argc, char *argv[]) {
 	client_sockfd_rd = 0;
 	client_sockfd_wr = 0;
 
-	/* Wake up threads */
+	// Wake up threads
 	for (i = 0; i < conf.thread_pool_size; i++) {
 
 		tid[i] = i;
@@ -406,7 +410,7 @@ int main(int argc, char *argv[]) {
 
 		sockfd = accept(server_sockfd, (struct sockaddr *) &client_addr, &client_size);
 
-		/* start of mutex area */
+		// start of mutex area
 		pthread_mutex_lock(&mutex_sockfd);
 
 		while (client_sockfd_count > conf.thread_pool_size) {
@@ -423,11 +427,11 @@ int main(int argc, char *argv[]) {
 		pthread_cond_broadcast(&cond_sockfd_empty);
 		pthread_mutex_unlock(&mutex_sockfd);
 
-		/* end of mutex area */
+		// end of mutex area
 
 		get_date(date_buffer, "%H:%M:%S, %a %b %d %Y");
 
-		/* Request received. Lets do this! */
+		// Request received :)
 		printf("[%s] %s \n", date_buffer, inet_ntoa(client_addr.sin_addr));
 
 	}
@@ -440,8 +444,10 @@ int main(int argc, char *argv[]) {
 	pthread_cond_destroy(&cond_sockfd_full);
 	pthread_mutex_destroy(&mutex_sockfd);
 
-	/* Closing time */
+	// Closing time
 	close(server_sockfd);
+
+	// free(client_sockfd);
 
 	exit(EXIT_SUCCESS);
 
